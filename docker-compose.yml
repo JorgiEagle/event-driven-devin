@@ -13,12 +13,14 @@ services:
     image: ngrok/ngrok:latest
     command: ["http", "http://app:8000"]
     environment:
-      NGROK_AUTHTOKEN: ${NGROK_AUTHTOKEN}
+      NGROK_AUTHTOKEN: ${NGROK_AUTHTOKEN:-}
     ports:
       - "4040:4040"
     depends_on:
       - app
-    restart: unless-stopped
+    restart: "no"
+    profiles:
+      - tunnel
 
 volumes:
   task_data:

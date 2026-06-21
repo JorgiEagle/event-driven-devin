@@ -80,9 +80,19 @@ Edit `config.json` with your settings:
 | `log_level` | Logging verbosity: DEBUG, INFO, WARNING, ERROR |
 | `data_dir` | Directory for task persistence (Docker volume mount) |
 
-### 2. Set up ngrok tunnel
+### 2. Run
 
-The app uses [ngrok](https://ngrok.com) to expose the webhook endpoint to the internet so GitHub can deliver events.
+```bash
+docker compose up --build
+```
+
+The dashboard is available at **http://localhost:8000**.
+
+All features work without a tunnel — issue listing, task history, manual kickoff, and the webhook endpoint (for local testing via curl) are fully functional.
+
+### 3. Enable webhook tunnel (optional)
+
+To receive live GitHub webhook events, enable the ngrok tunnel:
 
 1. Sign up free at https://ngrok.com/signup
 2. Copy your auth token from https://dashboard.ngrok.com/get-started/your-authtoken
@@ -92,14 +102,14 @@ The app uses [ngrok](https://ngrok.com) to expose the webhook endpoint to the in
 NGROK_AUTHTOKEN=your_ngrok_authtoken_here
 ```
 
-### 3. Run
+4. Start with the tunnel profile:
 
 ```bash
-docker compose up --build
+docker compose --profile tunnel up --build
 ```
 
-The dashboard is available at **http://localhost:8000**.  
-The ngrok inspect UI is at **http://localhost:4040**.
+The ngrok inspect UI is at **http://localhost:4040**.  
+Without `--profile tunnel`, the ngrok container is not started and the app runs fully offline.
 
 ### 4. Configure GitHub Webhook
 
