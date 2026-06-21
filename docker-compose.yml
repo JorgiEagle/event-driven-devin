@@ -1,0 +1,13 @@
+services:
+  app:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      - task_data:/data
+    environment:
+      - EDD_CONFIG_PATH=/app/config.json
+    restart: unless-stopped
+
+volumes:
+  task_data:

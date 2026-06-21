@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block title %}Dashboard - Event-Driven Devin{% endblock %}
+{% block content %}
+<div class="card">
+    <h2 style="margin-bottom: 16px;">Manual Task Kickoff</h2>
+    <form method="POST" action="/tasks/kickoff">
+        <div style="display: grid; grid-template-columns: 1fr 2fr 2fr 1fr auto; gap: 12px; align-items: end;">
+            <div class="form-group">
+                <label for="issue_number">Issue #</label>
+                <input type="number" name="issue_number" id="issue_number" required placeholder="42">
+            </div>
+            <div class="form-group">
+                <label for="issue_title">Title</label>
+                <input type="text" name="issue_title" id="issue_title" placeholder="Fix authentication bug">
+            </div>
+            <div class="form-group">
+                <label for="issue_url">Issue URL (optional)</label>
+                <input type="text" name="issue_url" id="issue_url" placeholder="https://github.com/...">
+            </div>
+            <div class="form-group">
+                <label for="repo">Repository</label>
+                <input type="text" name="repo" id="repo" placeholder="owner/repo">
+            </div>
+            <div class="form-group">
+                <button type="submit" class="btn btn-primary">Kick Off</button>
+            </div>
+        </div>
+    </form>
+</div>
+
+<div class="card">
+    <h2 style="margin-bottom: 16px;">Tracked Tasks</h2>
+    {% if tasks %}
+    <table>
+        <thead>
+            <tr>
+                <th>Issue</th>
+                <th>Title</th>
+                <th>Status</th>
+                <th>Trigger</th>
+                <th>Created</th>
+                <th>Links</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for task in tasks %}
+            <tr>
+                <td><a href="/tasks/{{ task.id }}">#{{ task.issue_number }}</a></td>
+                <td><a href="/tasks/{{ task.id }}">{{ task.issue_title }}</a></td>
+                <td><span class="status-badge status-{{ task.status.value }}">{{ task.status.value | replace('_', ' ') }}</span></td>
+                <td>{{ task.trigger }}</td>
+                <td class="meta">{{ task.created_at[:16] }}</td>
+                <td>
+                    {% if task.issue_url %}<a href="{{ task.issue_url }}" target="_blank">Issue</a>{% endif %}
+                    {% if task.devin_session_url %} | <a href="{{ task.devin_session_url }}" target="_blank">Devin</a>{% endif %}
+                    {% if task.pr_url %} | <a href="{{ task.pr_url }}" target="_blank">PR</a>{% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p style="color: #888; text-align: center; padding: 40px 0;">No tasks yet. Create one using the form above or send a webhook event.</p>
+    {% endif %}
+</div>
+{% endblock %}
