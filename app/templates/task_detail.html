@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block title %}Task #{{ task.issue_number }} - Event-Driven Devin{% endblock %}
+{% block content %}
+<div style="margin-bottom: 16px;">
+    <a href="/" class="btn btn-secondary">&larr; Back to Dashboard</a>
+</div>
+
+<div class="card">
+    <div style="display: flex; justify-content: space-between; align-items: start;">
+        <div>
+            <h2>{{ task.issue_title }}</h2>
+            <p class="meta">Issue #{{ task.issue_number }} in {{ task.repo }} &bull; Triggered by {{ task.trigger }}</p>
+        </div>
+        <span class="status-badge status-{{ task.status.value }}">{{ task.status.value | replace('_', ' ') }}</span>
+    </div>
+
+    <div style="margin-top: 16px; display: flex; gap: 12px;">
+        {% if task.issue_url %}
+        <a href="{{ task.issue_url }}" target="_blank" class="btn btn-secondary">View Issue</a>
+        {% endif %}
+        {% if task.devin_session_url %}
+        <a href="{{ task.devin_session_url }}" target="_blank" class="btn btn-secondary">View Devin Session</a>
+        {% endif %}
+        {% if task.pr_url %}
+        <a href="{{ task.pr_url }}" target="_blank" class="btn btn-secondary">View PR</a>
+        {% endif %}
+    </div>
+</div>
+
+<div class="card">
+    <h3 style="margin-bottom: 12px;">Status History</h3>
+    {% if task.transitions %}
+    <ul class="timeline">
+        {% for t in task.transitions %}
+        <li>
+            <strong>{{ t.to_status.value | replace('_', ' ') | title }}</strong>
+            {% if t.from_status %}<span class="meta"> (from {{ t.from_status.value | replace('_', ' ') }})</span>{% endif %}
+            <br>
+            <span class="meta">{{ t.timestamp[:19] }} &bull; {{ t.reason }}</span>
+        </li>
+        {% endfor %}
+    </ul>
+    {% else %}
+    <p class="meta">No transitions recorded yet.</p>
+    {% endif %}
+</div>
+
+<div class="card">
+    <h3 style="margin-bottom: 12px;">Update Status</h3>
+    <form method="POST" action="/tasks/{{ task.id }}/status">
+        <div style="display: grid; grid-template-columns: 1fr 2fr 2fr auto; gap: 12px; align-items: end;">
+            <div class="form-group">
+                <label for="new_status">New Status</label>
+                <select name="new_status" id="new_status">
+                    <option value="queued">Queued</option>
+                    <option value="resolving">Resolving</option>
+                    <option value="ready_to_merge">Ready to Merge</option>
+                    <option value="merged">Merged</option>
+                    <option value="failed">Failed</option>
+                    <option value="attention_required">Attention Required</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="reason">Reason</label>
+                <input type="text" name="reason" id="reason" placeholder="Optional reason">
+            </div>
+            <div class="form-group">
+                <label for="pr_url">PR URL (for ready_to_merge)</label>
+                <input type="text" name="pr_url" id="pr_url" placeholder="https://github.com/.../pull/1">
+            </div>
+            <div class="form-group">
+                <button type="submit" class="btn btn-primary">Update</button>
+            </div>
+        </div>
+    </form>
+</div>
+{% endblock %}

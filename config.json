@@ -1,0 +1,9 @@
+{
+  "target_repo": "owner/repo",
+  "github_webhook_secret": "",
+  "github_token": "",
+  "devin_api_token": "",
+  "trigger_label": "assign-devin",
+  "log_level": "INFO",
+  "data_dir": "./data"
+}
