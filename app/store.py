@@ -41,10 +41,14 @@ class TaskStore:
         return self._tasks.get(task_id)
 
     def get_by_issue(self, repo: str, issue_number: int) -> Optional[Task]:
-        for task in self._tasks.values():
-            if task.repo == repo and task.issue_number == issue_number:
-                return task
-        return None
+        """Return the most recent task for the given repo+issue."""
+        matches = [
+            t for t in self._tasks.values()
+            if t.repo == repo and t.issue_number == issue_number
+        ]
+        if not matches:
+            return None
+        return max(matches, key=lambda t: t.created_at)
 
     def update(self, task: Task) -> Task:
         with self._lock:

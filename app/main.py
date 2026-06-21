@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 
@@ -12,7 +13,9 @@ from app.config import load_settings
 from app.dashboard import router as dashboard_router
 from app.logging_config import setup_logging
 from app.store import TaskStore
+from app.tunnel import get_tunnel_url, get_webhook_url
 from app.webhook import router as webhook_router
+from app.webhook_register import register_webhook
 
 
 def create_app() -> FastAPI:
@@ -41,6 +44,35 @@ def create_app() -> FastAPI:
     static_dir = os.path.join(os.path.dirname(__file__), "static")
     if os.path.isdir(static_dir):
         app.mount("/static", StaticFiles(directory=static_dir), name="static")
+
+    @app.on_event("startup")
+    async def _on_startup() -> None:
+        """Discover tunnel URL and auto-register webhook on startup."""
+        # Retry tunnel discovery with backoff (ngrok may take a moment to start)
+        tunnel_url = None
+        for attempt in range(4):
+            await asyncio.sleep(1 + attempt)
+            tunnel_url = await get_tunnel_url()
+            if tunnel_url:
+                break
+
+        webhook_url = get_webhook_url(tunnel_url)
+
+        if webhook_url:
+            logger.info(
+                "Tunnel active",
+                extra={"webhook_url": webhook_url},
+            )
+            registered = await register_webhook(settings, webhook_url)
+            if registered:
+                logger.info("Webhook auto-registered with GitHub")
+            else:
+                logger.info(
+                    "Webhook not auto-registered (configure manually)",
+                    extra={"webhook_url": webhook_url},
+                )
+        else:
+            logger.info("No tunnel detected - webhook will not receive external events")
 
     logger.info(
         "Application started",
