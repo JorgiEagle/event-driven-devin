@@ -2,35 +2,66 @@
 {% block title %}Dashboard - Event-Driven Devin{% endblock %}
 {% block content %}
 <div class="card">
-    <h2 style="margin-bottom: 16px;">Manual Task Kickoff</h2>
-    <form method="POST" action="/tasks/kickoff">
-        <div style="display: grid; grid-template-columns: 1fr 2fr 2fr 1fr auto; gap: 12px; align-items: end;">
-            <div class="form-group">
-                <label for="issue_number">Issue #</label>
-                <input type="number" name="issue_number" id="issue_number" required placeholder="42">
-            </div>
-            <div class="form-group">
-                <label for="issue_title">Title</label>
-                <input type="text" name="issue_title" id="issue_title" placeholder="Fix authentication bug">
-            </div>
-            <div class="form-group">
-                <label for="issue_url">Issue URL (optional)</label>
-                <input type="text" name="issue_url" id="issue_url" placeholder="https://github.com/...">
-            </div>
-            <div class="form-group">
-                <label for="repo">Repository</label>
-                <input type="text" name="repo" id="repo" placeholder="owner/repo">
-            </div>
-            <div class="form-group">
-                <button type="submit" class="btn btn-primary">Kick Off</button>
-            </div>
-        </div>
-    </form>
+    <h2 style="margin-bottom: 16px;">GitHub Issues <span class="meta">{{ target_repo }}</span></h2>
+    {% if issues_with_status %}
+    <table>
+        <thead>
+            <tr>
+                <th>Issue</th>
+                <th>Title</th>
+                <th>Labels</th>
+                <th>Task Status</th>
+                <th>Action</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for entry in issues_with_status %}
+            {% set issue = entry.issue %}
+            {% set task = entry.task %}
+            <tr>
+                <td><a href="{{ issue.html_url }}" target="_blank">#{{ issue.number }}</a></td>
+                <td>{{ issue.title }}</td>
+                <td>
+                    {% for label in issue.labels %}
+                    <span class="label-badge" style="background: #{{ label.color }}20; color: #{{ label.color }}; border: 1px solid #{{ label.color }}40;">{{ label.name }}</span>
+                    {% endfor %}
+                </td>
+                <td>
+                    {% if task %}
+                    <a href="/tasks/{{ task.id }}">
+                        <span class="status-badge status-{{ task.status.value }}">{{ task.status.value | replace('_', ' ') }}</span>
+                    </a>
+                    {% else %}
+                    <span class="meta">No task</span>
+                    {% endif %}
+                </td>
+                <td>
+                    {% if not task or task.status.value in ['failed', 'merged'] %}
+                    <form method="POST" action="/tasks/kickoff/{{ issue.number }}" style="margin: 0;">
+                        <button type="submit" class="btn btn-primary btn-sm">Kick Off</button>
+                    </form>
+                    {% elif task %}
+                    <a href="/tasks/{{ task.id }}" class="btn btn-secondary btn-sm">View Task</a>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p style="color: #888; text-align: center; padding: 40px 0;">
+        {% if target_repo %}
+        No open issues found in {{ target_repo }}. Check that the repository exists and the GitHub token has read access.
+        {% else %}
+        No target repository configured. Set <code>target_repo</code> in config.json.
+        {% endif %}
+    </p>
+    {% endif %}
 </div>
 
+{% if tasks %}
 <div class="card">
-    <h2 style="margin-bottom: 16px;">Tracked Tasks</h2>
-    {% if tasks %}
+    <h2 style="margin-bottom: 16px;">Task History</h2>
     <table>
         <thead>
             <tr>
@@ -59,8 +90,6 @@
             {% endfor %}
         </tbody>
     </table>
-    {% else %}
-    <p style="color: #888; text-align: center; padding: 40px 0;">No tasks yet. Create one using the form above or send a webhook event.</p>
-    {% endif %}
 </div>
+{% endif %}
 {% endblock %}
