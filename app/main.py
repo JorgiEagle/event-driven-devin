@@ -48,10 +48,14 @@ def create_app() -> FastAPI:
     @app.on_event("startup")
     async def _on_startup() -> None:
         """Discover tunnel URL and auto-register webhook on startup."""
-        # Wait briefly for ngrok to initialize
-        await asyncio.sleep(2)
+        # Retry tunnel discovery with backoff (ngrok may take a moment to start)
+        tunnel_url = None
+        for attempt in range(4):
+            await asyncio.sleep(1 + attempt)
+            tunnel_url = await get_tunnel_url()
+            if tunnel_url:
+                break
 
-        tunnel_url = await get_tunnel_url()
         webhook_url = get_webhook_url(tunnel_url)
 
         if webhook_url:

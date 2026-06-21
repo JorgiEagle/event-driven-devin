@@ -11,6 +11,13 @@ from app.config import Settings
 
 logger = logging.getLogger(__name__)
 
+_NGROK_DOMAINS = (".ngrok.io", ".ngrok-free.app", ".ngrok.app", ".ngrok.dev")
+
+
+def _is_ngrok_url(url: str) -> bool:
+    """Check if a URL belongs to an ngrok tunnel."""
+    return any(domain in url for domain in _NGROK_DOMAINS)
+
 
 async def register_webhook(settings: Settings, webhook_url: str) -> bool:
     """Register or update the webhook on the target repository.
@@ -64,7 +71,7 @@ async def _find_existing_hook(
     headers: dict[str, str],
     webhook_url: str,
 ) -> int | None:
-    """Find an existing webhook that points to our URL (or any event-driven-devin hook)."""
+    """Find an existing webhook previously registered by this system."""
     try:
         response = await client.get(base_url, headers=headers)
         if response.status_code != 200:
@@ -74,8 +81,10 @@ async def _find_existing_hook(
         for hook in hooks:
             config = hook.get("config", {})
             url = config.get("url", "")
-            # Match if same URL or if it's an ngrok URL pointing to /webhook/github
-            if url == webhook_url or url.endswith("/webhook/github"):
+            # Match exact URL, or a previous ngrok tunnel URL for this endpoint
+            if url == webhook_url:
+                return hook.get("id")
+            if "/webhook/github" in url and _is_ngrok_url(url):
                 return hook.get("id")
     except Exception as exc:
         logger.warning("Failed to list webhooks", extra={"error": str(exc)})
