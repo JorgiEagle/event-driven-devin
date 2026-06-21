@@ -13,6 +13,7 @@ from app.github_client import GitHubClient
 from app.models import Task, TaskStatus
 from app.store import TaskStore
 from app.tasks import kickoff_task
+from app.tunnel import get_tunnel_url, get_webhook_url
 
 logger = logging.getLogger(__name__)
 templates = Jinja2Templates(directory="app/templates")
@@ -42,6 +43,10 @@ async def dashboard(request: Request) -> HTMLResponse:
     # Also get tasks (for the task history section)
     tasks = store.list_all()
 
+    # Discover tunnel URL for webhook configuration
+    tunnel_url = await get_tunnel_url()
+    webhook_url = get_webhook_url(tunnel_url)
+
     return templates.TemplateResponse(
         "dashboard.html",
         {
@@ -49,6 +54,7 @@ async def dashboard(request: Request) -> HTMLResponse:
             "issues_with_status": issues_with_status,
             "tasks": tasks,
             "target_repo": settings.target_repo,
+            "webhook_url": webhook_url,
         },
     )
 

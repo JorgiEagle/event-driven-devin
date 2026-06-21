@@ -80,23 +80,41 @@ Edit `config.json` with your settings:
 | `log_level` | Logging verbosity: DEBUG, INFO, WARNING, ERROR |
 | `data_dir` | Directory for task persistence (Docker volume mount) |
 
-### 2. Run
+### 2. Set up ngrok tunnel
+
+The app uses [ngrok](https://ngrok.com) to expose the webhook endpoint to the internet so GitHub can deliver events.
+
+1. Sign up free at https://ngrok.com/signup
+2. Copy your auth token from https://dashboard.ngrok.com/get-started/your-authtoken
+3. Create a `.env` file (see `.env.example`):
+
+```bash
+NGROK_AUTHTOKEN=your_ngrok_authtoken_here
+```
+
+### 3. Run
 
 ```bash
 docker compose up --build
 ```
 
-The dashboard is available at **http://localhost:8000**.
+The dashboard is available at **http://localhost:8000**.  
+The ngrok inspect UI is at **http://localhost:4040**.
 
-### 3. Set Up GitHub Webhook
+### 4. Configure GitHub Webhook
 
-In your target repository's settings:
-- **Payload URL**: `http://your-host:8000/webhook/github`
+The dashboard displays the current webhook URL in a green banner at the top. You can either:
+
+**Option A (automatic):** If your `github_token` has `admin:repo_hook` scope, the app auto-registers the webhook on startup. No manual configuration needed.
+
+**Option B (manual):** Copy the webhook URL from the dashboard and configure it in your target repository:
+- Go to **Settings → Webhooks → Add webhook**
+- **Payload URL**: The URL shown in the dashboard (e.g. `https://abc123.ngrok-free.app/webhook/github`)
 - **Content type**: `application/json`
 - **Secret**: Same value as `github_webhook_secret` in config
 - **Events**: Select "Issues"
 
-### 4. Use
+### 5. Use
 
 **Webhook path**: Create or label a GitHub issue with `assign-devin` to trigger automation.
 
