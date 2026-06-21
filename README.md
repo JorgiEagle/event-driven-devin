@@ -5,8 +5,8 @@ When an issue is created or labeled with `assign-devin`, the system triggers a D
 
 ## Features
 
-- **GitHub Issue Dashboard** - View tracked issues, task statuses, and full lifecycle history
-- **Manual Task Kickoff** - Start the same automation workflow from the web UI
+- **GitHub Issue Dashboard** - Lists open issues directly from the GitHub repository (authoritative source)
+- **Manual Task Kickoff** - One-click "Kick Off" button per issue to start a Devin session
 - **Event-Driven Remediation** - Webhook-triggered automation on `assign-devin` label
 - **Automatic PR Creation** - PRs are created only after Devin fully completes a task
 - **Structured Observability** - JSON logging with task/issue identifiers at every lifecycle step
@@ -16,9 +16,12 @@ When an issue is created or labeled with `assign-devin`, the system triggers a D
 
 Single-service Python application:
 - **FastAPI** web server with Jinja2 templates
+- **GitHub API client** for reading issues from the target repository (no local issue storage)
 - **GitHub webhook receiver** for event-driven triggers
-- **JSON file persistence** for task history (survives restarts via Docker volume)
+- **JSON file persistence** for task/session history only (not issues)
 - **Docker-based local deployment** (no external dependencies)
+
+GitHub is the authoritative source for issue data. The dashboard reads issues live from the API on each page load. Only Devin task/session state is stored locally.
 
 ## Task Lifecycle
 
@@ -97,18 +100,17 @@ In your target repository's settings:
 
 **Webhook path**: Create or label a GitHub issue with `assign-devin` to trigger automation.
 
-**Manual path**: Use the dashboard form at http://localhost:8000 to kick off a task by issue number.
+**Manual path**: Open the dashboard at http://localhost:8000, browse the issues fetched from GitHub, and click "Kick Off" on any issue to start a Devin session.
 
-Both paths write to the same task model and produce identical lifecycle tracking.
+Both paths write to the same task model and produce identical lifecycle tracking. There are no user-editable fields — the dashboard is read-only for issue data.
 
 ## API Endpoints
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `GET` | `/` | Dashboard (HTML) |
-| `GET` | `/tasks/{id}` | Task detail with history (HTML) |
-| `POST` | `/tasks/kickoff` | Manual task kickoff (form) |
-| `POST` | `/tasks/{id}/status` | Update task status (form) |
+| `GET` | `/` | Dashboard — lists GitHub issues with kick-off buttons (HTML) |
+| `GET` | `/tasks/{id}` | Task detail with status history (HTML) |
+| `POST` | `/tasks/kickoff/{issue_number}` | Trigger Devin session for a specific issue |
 | `POST` | `/webhook/github` | GitHub webhook receiver |
 
 ## Logging
