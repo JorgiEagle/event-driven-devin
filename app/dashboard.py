@@ -43,6 +43,32 @@ async def dashboard(request: Request) -> HTMLResponse:
     # Also get tasks (for the task history section)
     tasks = store.list_all()
 
+    # Compute metric card counts
+    in_progress_statuses = {
+        TaskStatus.READY,
+        TaskStatus.QUEUED,
+        TaskStatus.RESOLVING,
+        TaskStatus.READY_TO_MERGE,
+        TaskStatus.ATTENTION_REQUIRED,
+    }
+    resolved_auto = sum(
+        1 for t in tasks
+        if t.status == TaskStatus.MERGED and t.trigger == "webhook"
+    )
+    resolved_manual = sum(
+        1 for t in tasks
+        if t.status == TaskStatus.MERGED and t.trigger == "manual"
+    )
+    in_progress = sum(1 for t in tasks if t.status in in_progress_statuses)
+    in_progress_issue_numbers = {
+        t.issue_number for t in tasks if t.status in in_progress_statuses
+    }
+    outstanding = sum(
+        1
+        for entry in issues_with_status
+        if entry["issue"].get("number") not in in_progress_issue_numbers
+    )
+
     # Discover tunnel URL for webhook configuration
     tunnel_url = await get_tunnel_url()
     webhook_url = get_webhook_url(tunnel_url)
@@ -55,6 +81,10 @@ async def dashboard(request: Request) -> HTMLResponse:
             "tasks": tasks,
             "target_repo": settings.target_repo,
             "webhook_url": webhook_url,
+            "resolved_auto": resolved_auto,
+            "resolved_manual": resolved_manual,
+            "in_progress": in_progress,
+            "outstanding": outstanding,
         },
     )
 

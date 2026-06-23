@@ -104,6 +104,42 @@
             background: #1565c0;
         }
         .meta { font-size: 0.8rem; color: #888; }
+        .metrics-row {
+            display: flex;
+            gap: 16px;
+            margin-bottom: 16px;
+        }
+        .metric-card {
+            flex: 1;
+            background: #fff;
+            border-radius: 8px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            padding: 20px;
+            text-align: center;
+            border-top: 4px solid #ccc;
+        }
+        .metric-card .metric-value {
+            display: block;
+            font-size: 2rem;
+            font-weight: 700;
+            line-height: 1.2;
+        }
+        .metric-card .metric-label {
+            display: block;
+            font-size: 0.8rem;
+            color: #666;
+            text-transform: uppercase;
+            font-weight: 500;
+            margin-top: 4px;
+        }
+        .metric-auto { border-top-color: #6a1b9a; }
+        .metric-auto .metric-value { color: #6a1b9a; }
+        .metric-manual { border-top-color: #00695c; }
+        .metric-manual .metric-value { color: #00695c; }
+        .metric-progress { border-top-color: #1565c0; }
+        .metric-progress .metric-value { color: #1565c0; }
+        .metric-outstanding { border-top-color: #e65100; }
+        .metric-outstanding .metric-value { color: #e65100; }
     </style>
 </head>
 <body>
