@@ -84,8 +84,10 @@ NGROK_AUTHTOKEN=
 
 ### Step 4: Start the app
 
+Make sure `NGROK_AUTHTOKEN` is set in your `.env` file
+
 ```bash
-docker compose up --build
+docker compose --profile tunnel up --build
 ```
 
 The dashboard is now available at **http://localhost:8000**.
@@ -100,23 +102,20 @@ Open [http://localhost:8000](http://localhost:8000) in your browser. You will se
 
 There are no user-editable fields — the dashboard is read-only for issue data. The only user action is clicking "Kick Off" to start automation on a specific issue.
 
-### Step 6: Enable webhook tunnel (optional)
+To receive live GitHub webhook events (so issues with the `assign-devin` label automatically trigger Devin sessions), you need a public URL. The app supports ngrok as an optional tunnel
 
-To receive live GitHub webhook events (so issues with the `assign-devin` label automatically trigger Devin sessions), you need a public URL. The app supports ngrok as an optional tunnel:
-
-1. Make sure `NGROK_AUTHTOKEN` is set in your `.env` file
-2. Start with the tunnel profile:
-
-```bash
-docker compose --profile tunnel up --build
-```
-
-3. The dashboard will show a green banner with your webhook URL (e.g. `https://abc123.ngrok-free.app/webhook/github`)
-4. The ngrok inspection UI is available at **http://localhost:4040**
+The dashboard will show a green banner with your webhook URL (e.g. `https://abc123.ngrok-free.app/webhook/github`)
+The ngrok inspection UI is available at **http://localhost:4040**
 
 Without `--profile tunnel`, the ngrok container is not started. The app runs fully offline — issue listing, task history, and manual kickoff all work without a tunnel.
 
-### Step 7: Configure GitHub webhook (optional)
+This can be done by running:
+
+```bash
+docker compose up --build
+```
+
+### Step 6: Configure GitHub webhook (optional)
 
 Once your tunnel is running, configure GitHub to send events to your app:
 
