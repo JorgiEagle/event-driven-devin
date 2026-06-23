@@ -71,12 +71,13 @@
                     <span class="meta">No task</span>
                     {% endif %}
                 </td>
-                <td>
+                <td style="display: flex; gap: 6px; align-items: center;">
                     {% if not task or task.status.value in ['failed', 'merged'] %}
                     <form method="POST" action="/tasks/kickoff/{{ issue.number }}" style="margin: 0;">
                         <button type="submit" class="btn btn-primary btn-sm">Kick Off</button>
                     </form>
-                    {% elif task %}
+                    {% endif %}
+                    {% if task %}
                     <a href="/tasks/{{ task.id }}" class="btn btn-secondary btn-sm">View Task</a>
                     {% endif %}
                 </td>
@@ -95,9 +96,9 @@
     {% endif %}
 </div>
 
-{% if tasks %}
 <div class="card">
     <h2 style="margin-bottom: 16px;">Task History</h2>
+    {% if tasks %}
     <table>
         <thead>
             <tr>
@@ -132,6 +133,8 @@
             {% endfor %}
         </tbody>
     </table>
+    {% else %}
+    <p style="color: #888; text-align: center; padding: 40px 0;">No tasks yet. Kick off a task from the issues table above or send a webhook event.</p>
+    {% endif %}
 </div>
-{% endif %}
 {% endblock %}
