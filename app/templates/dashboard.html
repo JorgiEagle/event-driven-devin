@@ -55,8 +55,7 @@
         <h2 style="margin: 0;">GitHub Issues <span class="meta">{{ target_repo }}</span></h2>
     </summary>
     <div class="collapsible-body">
-    {% if issues_with_status %}
-    <table>
+    <table {% if not issues_with_status %}style="display:none"{% endif %} id="issues-table">
         <thead>
             <tr>
                 <th>Issue</th>
@@ -66,7 +65,7 @@
                 <th>Action</th>
             </tr>
         </thead>
-        <tbody>
+        <tbody id="issues-tbody">
             {% for entry in issues_with_status %}
             {% set issue = entry.issue %}
             {% set task = entry.task %}
@@ -101,15 +100,13 @@
             {% endfor %}
         </tbody>
     </table>
-    {% else %}
-    <p style="color: #888; text-align: center; padding: 40px 0;">
+    <p id="issues-empty" style="{% if issues_with_status %}display:none;{% endif %}color: #888; text-align: center; padding: 40px 0;">
         {% if target_repo %}
         No open issues found in {{ target_repo }}. Check that the repository exists and the GitHub token has read access.
         {% else %}
         No target repository configured. Set <code>target_repo</code> in config.json.
         {% endif %}
     </p>
-    {% endif %}
     </div>
 </details>
 
@@ -118,8 +115,7 @@
         <h2 style="margin: 0;">Task History</h2>
     </summary>
     <div class="collapsible-body">
-    {% if tasks %}
-    <table>
+    <table {% if not tasks %}style="display:none"{% endif %} id="tasks-table">
         <thead>
             <tr>
                 <th>Issue</th>
@@ -131,7 +127,7 @@
                 <th>Action</th>
             </tr>
         </thead>
-        <tbody>
+        <tbody id="tasks-tbody">
             {% for task in tasks %}
             <tr>
                 <td><a href="/tasks/{{ task.id }}">#{{ task.issue_number }}</a></td>
@@ -172,9 +168,136 @@
             {% endfor %}
         </tbody>
     </table>
-    {% else %}
-    <p style="color: #888; text-align: center; padding: 40px 0;">No tasks yet. Kick off a task from the issues table above or send a webhook event.</p>
-    {% endif %}
+    <p id="tasks-empty" style="{% if tasks %}display:none;{% endif %}color: #888; text-align: center; padding: 40px 0;">No tasks yet. Kick off a task from the issues table above or send a webhook event.</p>
     </div>
 </details>
+<script>
+(function() {
+    const POLL_INTERVAL = 10000;
+    const TERMINAL = new Set(['failed', 'merged']);
+
+    function statusClass(status) {
+        return 'status-badge status-' + status;
+    }
+
+    function escapeHtml(s) {
+        return String(s)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+
+    function renderMetrics(m) {
+        const ids = [
+            ['metric-auto', m.resolved_auto],
+            ['metric-manual', m.resolved_manual],
+            ['metric-progress', m.in_progress],
+            ['metric-outstanding', m.outstanding],
+        ];
+        ids.forEach(function(pair) {
+            const el = document.querySelector('.'+pair[0]+' .metric-value');
+            if (el) el.textContent = pair[1];
+        });
+    }
+
+    function renderIssues(issues) {
+        const tbody = document.getElementById('issues-tbody');
+        const empty = document.getElementById('issues-empty');
+        const table = document.getElementById('issues-table');
+        if (!tbody) return;
+        if (!issues.length) {
+            tbody.innerHTML = '';
+            if (table) table.style.display = 'none';
+            if (empty) empty.style.display = '';
+            return;
+        }
+        if (table) table.style.display = '';
+        if (empty) empty.style.display = 'none';
+        tbody.innerHTML = issues.map(function(entry) {
+            const i = entry;
+            const t = entry.task;
+            let labels = (i.labels || []).map(function(l) {
+                return '<span class="label-badge" style="background:#'+l.color+'20;color:#'+l.color+';border:1px solid #'+l.color+'40;">'+escapeHtml(l.name)+'</span>';
+            }).join('');
+            let taskStatus = '<span class="meta">No task</span>';
+            if (t) {
+                taskStatus = '<a href="/tasks/'+t.id+'"><span class="'+statusClass(t.status)+'">'+t.status.replace(/_/g, ' ')+'</span></a>';
+            }
+            let action = '';
+            if (!t || TERMINAL.has(t.status)) {
+                action += '<form method="POST" action="/tasks/kickoff/'+i.number+'" style="margin:0"><button type="submit" class="btn btn-primary btn-sm">Kick Off</button></form>';
+            }
+            if (t) {
+                action += '<a href="/tasks/'+t.id+'" class="btn btn-secondary btn-sm">View Task</a>';
+            }
+            return '<tr><td><a href="'+i.html_url+'" target="_blank">#'+i.number+'</a></td>'
+                +'<td>'+escapeHtml(i.title)+'</td>'
+                +'<td>'+labels+'</td>'
+                +'<td>'+taskStatus+'</td>'
+                +'<td style="display:flex;gap:6px;align-items:center;">'+action+'</td></tr>';
+        }).join('');
+    }
+
+    function renderTasks(tasks) {
+        const tbody = document.getElementById('tasks-tbody');
+        const empty = document.getElementById('tasks-empty');
+        const table = document.getElementById('tasks-table');
+        if (!tbody) return;
+        if (!tasks.length) {
+            tbody.innerHTML = '';
+            if (table) table.style.display = 'none';
+            if (empty) empty.style.display = '';
+            return;
+        }
+        if (table) table.style.display = '';
+        if (empty) empty.style.display = 'none';
+        tbody.innerHTML = tasks.map(function(t) {
+            let testBadge = '<span class="meta">&mdash;</span>';
+            if (t.test_result === 'passed') {
+                testBadge = '<span class="test-badge test-passed" title="'+escapeHtml(t.test_summary)+'">Passed</span>';
+            } else if (t.test_result === 'failed') {
+                testBadge = '<span class="test-badge test-failed" title="'+escapeHtml(t.test_summary)+'">Failed</span>';
+            } else if (t.status === 'resolving' || t.status === 'queued') {
+                testBadge = '<span class="meta">Pending</span>';
+            }
+            let source = t.trigger === 'manual'
+                ? '<span class="source-badge source-manual">Manual</span>'
+                : '<span class="source-badge source-auto">Auto</span>';
+            let links = '';
+            if (t.issue_url) links += '<a href="'+t.issue_url+'" target="_blank">Issue</a>';
+            if (t.devin_session_url) links += ' | <a href="'+t.devin_session_url+'" target="_blank">Devin</a>';
+            if (t.pr_url) links += ' | <a href="'+t.pr_url+'" target="_blank">PR</a>';
+            let action = '';
+            if (t.status === 'ready_to_merge' && t.pr_number) {
+                action += '<form method="POST" action="/tasks/'+t.id+'/merge" style="margin:0"><button type="submit" class="btn btn-primary btn-sm">Merge PR</button></form>';
+            }
+            action += '<a href="/tasks/'+t.id+'" class="btn btn-secondary btn-sm">View</a>';
+            return '<tr><td><a href="/tasks/'+t.id+'">#'+t.issue_number+'</a></td>'
+                +'<td><a href="/tasks/'+t.id+'">'+escapeHtml(t.issue_title)+'</a></td>'
+                +'<td><span class="'+statusClass(t.status)+'">'+t.status.replace(/_/g, ' ')+'</span></td>'
+                +'<td>'+testBadge+'</td>'
+                +'<td>'+source+'</td>'
+                +'<td>'+links+'</td>'
+                +'<td style="display:flex;gap:6px;align-items:center;">'+action+'</td></tr>';
+        }).join('');
+    }
+
+    async function poll() {
+        try {
+            const resp = await fetch('/api/dashboard');
+            if (!resp.ok) return;
+            const data = await resp.json();
+            renderMetrics(data.metrics);
+            renderIssues(data.issues);
+            renderTasks(data.tasks);
+        } catch(e) {
+            // Silently retry next cycle
+        }
+    }
+
+    setInterval(poll, POLL_INTERVAL);
+})();
+</script>
 {% endblock %}
