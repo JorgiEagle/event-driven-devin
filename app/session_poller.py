@@ -145,7 +145,9 @@ async def _check_session(
             return
 
         data = response.json()
-        session_status = data.get("status", "")
+        # Devin API returns status_enum for lifecycle state (e.g. "finished")
+        # while status may be "suspended" for completed sessions
+        session_status = data.get("status_enum", data.get("status", ""))
         pr_info = data.get("pull_request")
         pr_url = pr_info.get("url", "") if isinstance(pr_info, dict) else ""
         messages = data.get("messages", [])
@@ -174,8 +176,9 @@ async def _check_session(
         # Extract test results from session messages
         test_result, test_summary = _extract_test_result(messages)
 
-        # Handle session completion
-        if session_status == "finished":
+        # Handle session completion (status_enum "finished" or "stopped")
+        is_terminal = session_status in ("finished", "stopped")
+        if is_terminal:
             if test_result:
                 task.test_result = test_result
                 task.test_summary = test_summary
@@ -184,7 +187,7 @@ async def _check_session(
                 task.pr_url = pr_url
                 task.pr_number = pr_number
 
-                # Also check GitHub CI status if we haven't got test results from messages
+                # Check GitHub CI status if no test results from messages
                 if not test_result:
                     ci_status = await _check_github_pr_status(task, settings, client)
                     if ci_status == "passed":
@@ -219,6 +222,12 @@ async def _check_session(
                         "pr_url": pr_url,
                     },
                 )
+            elif session_status == "stopped":
+                task.transition_to(
+                    TaskStatus.FAILED,
+                    reason="Devin session was stopped",
+                )
+                store.update(task)
             else:
                 task.transition_to(
                     TaskStatus.ATTENTION_REQUIRED,
@@ -232,20 +241,6 @@ async def _check_session(
                         "issue_number": task.issue_number,
                     },
                 )
-
-        elif session_status == "stopped":
-            task.transition_to(
-                TaskStatus.FAILED,
-                reason="Devin session was stopped",
-            )
-            store.update(task)
-            logger.warning(
-                "Session stopped",
-                extra={
-                    "task_id": task.id,
-                    "issue_number": task.issue_number,
-                },
-            )
 
         elif session_status == "running" and pr_url and task.status == TaskStatus.RESOLVING:
             # Session still running but PR created — update PR info, stay in resolving
