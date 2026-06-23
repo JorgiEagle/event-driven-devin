@@ -179,17 +179,43 @@ async def _check_session(
         # Handle session completion (status_enum "finished" or "stopped")
         is_terminal = session_status in ("finished", "stopped")
         if is_terminal:
+            # Guard: skip if task already moved past active state (e.g. merged
+            # by dashboard or poller's _check_pr_merged during an await)
+            if task.status not in ACTIVE_STATUSES:
+                logger.info(
+                    "Task status changed during poll, skipping transition",
+                    extra={"task_id": task.id, "current_status": task.status.value},
+                )
+                return
+
             if test_result:
                 task.test_result = test_result
                 task.test_summary = test_summary
 
-            if pr_url:
+            if pr_url and session_status == "stopped":
+                # Stopped session with PR — work may be incomplete
+                task.pr_url = pr_url
+                task.pr_number = pr_number
+                task.transition_to(
+                    TaskStatus.ATTENTION_REQUIRED,
+                    reason="Devin session was stopped — PR may contain incomplete work",
+                )
+                store.update(task)
+            elif pr_url:
                 task.pr_url = pr_url
                 task.pr_number = pr_number
 
                 # Check GitHub CI status if no test results from messages
                 if not test_result:
                     ci_status = await _check_github_pr_status(task, settings, client)
+                    # Re-check status after await — another handler may have
+                    # transitioned the task while we were waiting
+                    if task.status not in ACTIVE_STATUSES:
+                        logger.info(
+                            "Task status changed during CI check, skipping",
+                            extra={"task_id": task.id, "current_status": task.status.value},
+                        )
+                        return
                     if ci_status == "passed":
                         task.test_result = "passed"
                         task.test_summary = "CI checks passed on PR"
