@@ -21,7 +21,7 @@ ACTIVE_STATUSES = {TaskStatus.RESOLVING, TaskStatus.QUEUED}
 
 def _extract_session_id(session_url: str) -> Optional[str]:
     """Extract the session ID from a Devin session URL."""
-    match = re.search(r"/sessions/([a-f0-9]+)$", session_url)
+    match = re.search(r"/sessions/([a-f0-9A-F-]+)(?:\?|$)", session_url)
     if match:
         return match.group(1)
     return None
