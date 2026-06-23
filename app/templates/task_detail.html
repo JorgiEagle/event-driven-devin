@@ -14,7 +14,7 @@
         <span class="status-badge status-{{ task.status.value }}">{{ task.status.value | replace('_', ' ') }}</span>
     </div>
 
-    <div style="margin-top: 16px; display: flex; gap: 12px;">
+    <div style="margin-top: 16px; display: flex; gap: 12px; flex-wrap: wrap;">
         {% if task.issue_url %}
         <a href="{{ task.issue_url }}" target="_blank" class="btn btn-secondary">View Issue</a>
         {% endif %}
@@ -24,8 +24,29 @@
         {% if task.pr_url %}
         <a href="{{ task.pr_url }}" target="_blank" class="btn btn-secondary">View PR</a>
         {% endif %}
+        {% if task.status.value == 'ready_to_merge' and task.pr_number %}
+        <form method="POST" action="/tasks/{{ task.id }}/merge" style="margin: 0;">
+            <button type="submit" class="btn btn-primary">Merge PR</button>
+        </form>
+        {% endif %}
     </div>
 </div>
+
+{% if task.test_result %}
+<div class="card" style="border-left: 4px solid {% if task.test_result == 'passed' %}#4caf50{% else %}#f44336{% endif %};">
+    <h3 style="margin-bottom: 8px;">
+        Test Results:
+        {% if task.test_result == 'passed' %}
+        <span class="test-badge test-passed">Passed</span>
+        {% else %}
+        <span class="test-badge test-failed">Failed</span>
+        {% endif %}
+    </h3>
+    {% if task.test_summary %}
+    <p style="margin: 0; font-size: 0.9rem; color: #555;">{{ task.test_summary }}</p>
+    {% endif %}
+</div>
+{% endif %}
 
 <div class="card">
     <h3 style="margin-bottom: 12px;">Status History</h3>

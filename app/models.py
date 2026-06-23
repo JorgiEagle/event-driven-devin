@@ -44,6 +44,8 @@ class Task(BaseModel):
     devin_session_url: Optional[str] = None
     pr_url: Optional[str] = None
     pr_number: Optional[int] = None
+    test_result: Optional[str] = None  # "passed", "failed", or None
+    test_summary: Optional[str] = None  # Human-readable test outcome
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     updated_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     transitions: list[StatusTransition] = Field(default_factory=list)

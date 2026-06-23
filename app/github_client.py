@@ -96,6 +96,86 @@ class GitHubClient:
             )
             return []
 
+    async def merge_pull_request(
+        self, pr_number: int, merge_method: str = "squash"
+    ) -> bool:
+        """Merge a pull request by number.
+
+        Returns True on success, False on failure.
+        """
+        if not self._repo:
+            return False
+
+        url = f"{self._base_url}/repos/{self._repo}/pulls/{pr_number}/merge"
+
+        try:
+            async with httpx.AsyncClient(timeout=15.0) as client:
+                response = await client.put(
+                    url,
+                    headers=self._headers,
+                    json={"merge_method": merge_method},
+                )
+                if response.status_code == 200:
+                    logger.info(
+                        "PR merged successfully",
+                        extra={
+                            "repo": self._repo,
+                            "pr_number": pr_number,
+                            "merge_method": merge_method,
+                        },
+                    )
+                    return True
+                logger.warning(
+                    "Failed to merge PR",
+                    extra={
+                        "repo": self._repo,
+                        "pr_number": pr_number,
+                        "status_code": response.status_code,
+                        "response": response.text[:300],
+                    },
+                )
+        except Exception as exc:
+            logger.error(
+                "GitHub API merge request failed",
+                extra={
+                    "repo": self._repo,
+                    "pr_number": pr_number,
+                    "error": str(exc),
+                },
+            )
+        return False
+
+    async def get_pull_request(self, pr_number: int) -> dict[str, Any] | None:
+        """Fetch a single pull request by number."""
+        if not self._repo:
+            return None
+
+        url = f"{self._base_url}/repos/{self._repo}/pulls/{pr_number}"
+
+        try:
+            async with httpx.AsyncClient(timeout=15.0) as client:
+                response = await client.get(url, headers=self._headers)
+                if response.status_code == 200:
+                    return response.json()
+                logger.warning(
+                    "Failed to fetch PR",
+                    extra={
+                        "repo": self._repo,
+                        "pr_number": pr_number,
+                        "status_code": response.status_code,
+                    },
+                )
+        except Exception as exc:
+            logger.error(
+                "GitHub API request failed",
+                extra={
+                    "repo": self._repo,
+                    "pr_number": pr_number,
+                    "error": str(exc),
+                },
+            )
+        return None
+
     async def get_issue(self, issue_number: int) -> dict[str, Any] | None:
         """Fetch a single issue by number."""
         if not self._repo:
