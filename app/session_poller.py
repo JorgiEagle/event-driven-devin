@@ -21,7 +21,7 @@ ACTIVE_STATUSES = {TaskStatus.RESOLVING, TaskStatus.QUEUED}
 
 def _extract_session_id(session_url: str) -> Optional[str]:
     """Extract the session ID from a Devin session URL."""
-    match = re.search(r"/sessions/([a-f0-9A-F-]+)(?:\?|$)", session_url)
+    match = re.search(r"/sessions/([a-zA-Z0-9_-]+)", session_url)
     if match:
         return match.group(1)
     return None
@@ -39,15 +39,7 @@ def _extract_test_result(messages: list[dict[str, Any]]) -> tuple[Optional[str],
         text = msg.get("message", "")
         text_lower = text.lower()
 
-        # Look for explicit test result indicators
-        if any(phrase in text_lower for phrase in [
-            "tests passed", "test passed", "all tests pass",
-            "tests are passing", "ci passed", "ci is passing",
-            "passing ci", "build passed",
-        ]):
-            summary = _truncate(text, 200)
-            return "passed", summary
-
+        # Check failure first — a partial failure should be treated as failure
         if any(phrase in text_lower for phrase in [
             "tests failed", "test failed", "tests are failing",
             "ci failed", "ci is failing", "build failed",
@@ -55,6 +47,14 @@ def _extract_test_result(messages: list[dict[str, Any]]) -> tuple[Optional[str],
         ]):
             summary = _truncate(text, 200)
             return "failed", summary
+
+        if any(phrase in text_lower for phrase in [
+            "tests passed", "test passed", "all tests pass",
+            "tests are passing", "ci passed", "ci is passing",
+            "passing ci", "build passed",
+        ]):
+            summary = _truncate(text, 200)
+            return "passed", summary
 
     return None, None
 
@@ -145,7 +145,9 @@ async def _check_session(
             return
 
         data = response.json()
-        session_status = data.get("status", "")
+        # Devin API returns status_enum for lifecycle state (e.g. "finished")
+        # while status may be "suspended" for completed sessions
+        session_status = data.get("status_enum", data.get("status", ""))
         pr_info = data.get("pull_request")
         pr_url = pr_info.get("url", "") if isinstance(pr_info, dict) else ""
         messages = data.get("messages", [])
@@ -174,19 +176,46 @@ async def _check_session(
         # Extract test results from session messages
         test_result, test_summary = _extract_test_result(messages)
 
-        # Handle session completion
-        if session_status == "finished":
+        # Handle session completion (status_enum "finished" or "stopped")
+        is_terminal = session_status in ("finished", "stopped")
+        if is_terminal:
+            # Guard: skip if task already moved past active state (e.g. merged
+            # by dashboard or poller's _check_pr_merged during an await)
+            if task.status not in ACTIVE_STATUSES:
+                logger.info(
+                    "Task status changed during poll, skipping transition",
+                    extra={"task_id": task.id, "current_status": task.status.value},
+                )
+                return
+
             if test_result:
                 task.test_result = test_result
                 task.test_summary = test_summary
 
-            if pr_url:
+            if pr_url and session_status == "stopped":
+                # Stopped session with PR — work may be incomplete
+                task.pr_url = pr_url
+                task.pr_number = pr_number
+                task.transition_to(
+                    TaskStatus.ATTENTION_REQUIRED,
+                    reason="Devin session was stopped — PR may contain incomplete work",
+                )
+                store.update(task)
+            elif pr_url:
                 task.pr_url = pr_url
                 task.pr_number = pr_number
 
-                # Also check GitHub CI status if we haven't got test results from messages
+                # Check GitHub CI status if no test results from messages
                 if not test_result:
                     ci_status = await _check_github_pr_status(task, settings, client)
+                    # Re-check status after await — another handler may have
+                    # transitioned the task while we were waiting
+                    if task.status not in ACTIVE_STATUSES:
+                        logger.info(
+                            "Task status changed during CI check, skipping",
+                            extra={"task_id": task.id, "current_status": task.status.value},
+                        )
+                        return
                     if ci_status == "passed":
                         task.test_result = "passed"
                         task.test_summary = "CI checks passed on PR"
@@ -219,6 +248,12 @@ async def _check_session(
                         "pr_url": pr_url,
                     },
                 )
+            elif session_status == "stopped":
+                task.transition_to(
+                    TaskStatus.FAILED,
+                    reason="Devin session was stopped",
+                )
+                store.update(task)
             else:
                 task.transition_to(
                     TaskStatus.ATTENTION_REQUIRED,
@@ -232,20 +267,6 @@ async def _check_session(
                         "issue_number": task.issue_number,
                     },
                 )
-
-        elif session_status == "stopped":
-            task.transition_to(
-                TaskStatus.FAILED,
-                reason="Devin session was stopped",
-            )
-            store.update(task)
-            logger.warning(
-                "Session stopped",
-                extra={
-                    "task_id": task.id,
-                    "issue_number": task.issue_number,
-                },
-            )
 
         elif session_status == "running" and pr_url and task.status == TaskStatus.RESOLVING:
             # Session still running but PR created — update PR info, stay in resolving
