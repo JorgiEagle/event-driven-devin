@@ -156,8 +156,15 @@ async def _start_devin_session(task: Task, settings: Settings) -> Optional[str]:
                     "prompt": (
                         f"Fix issue #{task.issue_number} in {task.repo}: "
                         f"{task.issue_title}\n\n"
-                        f"Issue URL: {task.issue_url}\n"
-                        f"Please resolve this issue and create a pull request."
+                        f"Issue URL: {task.issue_url}\n\n"
+                        f"Instructions:\n"
+                        f"1. Resolve the issue and create a pull request.\n"
+                        f"2. Automatically test your changes — do NOT wait for "
+                        f"user approval to test. Run all relevant tests and "
+                        f"verify the fix works end-to-end.\n"
+                        f"3. Include test results in your final message: "
+                        f"state whether tests PASSED or FAILED and summarize "
+                        f"what was tested."
                     ),
                 },
             )

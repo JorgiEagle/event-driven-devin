@@ -112,9 +112,10 @@
                 <th>Issue</th>
                 <th>Title</th>
                 <th>Status</th>
+                <th>Tests</th>
                 <th>Source</th>
-                <th>Created</th>
                 <th>Links</th>
+                <th>Action</th>
             </tr>
         </thead>
         <tbody>
@@ -124,17 +125,35 @@
                 <td><a href="/tasks/{{ task.id }}">{{ task.issue_title }}</a></td>
                 <td><span class="status-badge status-{{ task.status.value }}">{{ task.status.value | replace('_', ' ') }}</span></td>
                 <td>
+                    {% if task.test_result == 'passed' %}
+                    <span class="test-badge test-passed" title="{{ task.test_summary or '' }}">Passed</span>
+                    {% elif task.test_result == 'failed' %}
+                    <span class="test-badge test-failed" title="{{ task.test_summary or '' }}">Failed</span>
+                    {% elif task.status.value in ['resolving', 'queued'] %}
+                    <span class="meta">Pending</span>
+                    {% else %}
+                    <span class="meta">&mdash;</span>
+                    {% endif %}
+                </td>
+                <td>
                     {% if task.trigger == 'manual' %}
                     <span class="source-badge source-manual">Manual</span>
                     {% else %}
                     <span class="source-badge source-auto">Auto</span>
                     {% endif %}
                 </td>
-                <td class="meta">{{ task.created_at[:16] }}</td>
                 <td>
                     {% if task.issue_url %}<a href="{{ task.issue_url }}" target="_blank">Issue</a>{% endif %}
                     {% if task.devin_session_url %} | <a href="{{ task.devin_session_url }}" target="_blank">Devin</a>{% endif %}
                     {% if task.pr_url %} | <a href="{{ task.pr_url }}" target="_blank">PR</a>{% endif %}
+                </td>
+                <td style="display: flex; gap: 6px; align-items: center;">
+                    {% if task.status.value == 'ready_to_merge' and task.pr_number %}
+                    <form method="POST" action="/tasks/{{ task.id }}/merge" style="margin: 0;">
+                        <button type="submit" class="btn btn-primary btn-sm">Merge PR</button>
+                    </form>
+                    {% endif %}
+                    <a href="/tasks/{{ task.id }}" class="btn btn-secondary btn-sm">View</a>
                 </td>
             </tr>
             {% endfor %}
