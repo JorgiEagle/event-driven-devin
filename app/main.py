@@ -12,6 +12,7 @@ from fastapi.staticfiles import StaticFiles
 from app.config import load_settings
 from app.dashboard import router as dashboard_router
 from app.logging_config import setup_logging
+from app.session_poller import start_poller
 from app.store import TaskStore
 from app.tunnel import get_tunnel_url, get_webhook_url
 from app.webhook import router as webhook_router
@@ -73,6 +74,9 @@ def create_app() -> FastAPI:
                 )
         else:
             logger.info("No tunnel detected - webhook will not receive external events")
+
+        # Start background session poller
+        asyncio.create_task(start_poller(app.state.store, settings))
 
     logger.info(
         "Application started",
