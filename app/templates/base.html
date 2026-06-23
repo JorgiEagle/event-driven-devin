@@ -176,6 +176,10 @@
             <h1><a href="/">Event-Driven Devin</a></h1>
             <nav>
                 <a href="/">Dashboard</a>
+                {% if target_repo %}
+                <a href="https://github.com/{{ target_repo }}" target="_blank">GitHub Repo</a>
+                <a href="https://github.com/{{ target_repo }}/issues/new" target="_blank" class="btn btn-primary btn-sm" style="margin-left: 8px;">Create Issue</a>
+                {% endif %}
             </nav>
         </div>
     </header>
