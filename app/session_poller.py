@@ -277,18 +277,95 @@ async def _check_session(
         )
 
 
-async def poll_active_sessions(store: TaskStore, settings: Settings) -> None:
-    """Run a single poll cycle: check all active tasks for session updates."""
-    if not settings.devin_api_token:
+async def _check_pr_merged(
+    task: Task,
+    store: TaskStore,
+    settings: Settings,
+    client: httpx.AsyncClient,
+) -> None:
+    """Check if a task's PR has been merged on GitHub and update status."""
+    if not task.pr_number or not settings.github_token:
         return
 
-    active_tasks = [t for t in store.list_all() if t.status in ACTIVE_STATUSES]
-    if not active_tasks:
+    repo = task.repo or settings.target_repo
+    url = f"https://api.github.com/repos/{repo}/pulls/{task.pr_number}"
+
+    try:
+        response = await client.get(
+            url,
+            headers={
+                "Authorization": f"Bearer {settings.github_token}",
+                "Accept": "application/vnd.github+json",
+            },
+        )
+        if response.status_code != 200:
+            return
+
+        pr_data = response.json()
+        if pr_data.get("merged"):
+            task.transition_to(TaskStatus.MERGED, reason="PR merged")
+            store.update(task)
+            logger.info(
+                "PR merge detected",
+                extra={
+                    "task_id": task.id,
+                    "issue_number": task.issue_number,
+                    "pr_number": task.pr_number,
+                    "trigger": task.trigger,
+                    "state": task.status.value,
+                },
+            )
+        elif pr_data.get("state") == "closed" and not pr_data.get("merged"):
+            task.transition_to(
+                TaskStatus.FAILED,
+                reason="PR was closed without merging",
+            )
+            store.update(task)
+            logger.warning(
+                "PR closed without merge",
+                extra={
+                    "task_id": task.id,
+                    "issue_number": task.issue_number,
+                    "pr_number": task.pr_number,
+                },
+            )
+    except Exception as exc:
+        logger.error(
+            "Failed to check PR merge status",
+            extra={
+                "task_id": task.id,
+                "pr_number": task.pr_number,
+                "error": str(exc),
+            },
+        )
+
+
+MERGE_CHECK_STATUSES = {TaskStatus.READY_TO_MERGE, TaskStatus.ATTENTION_REQUIRED}
+
+
+async def poll_active_sessions(store: TaskStore, settings: Settings) -> None:
+    """Run a single poll cycle: check active sessions and pending merges."""
+    all_tasks = store.list_all()
+
+    active_tasks = [t for t in all_tasks if t.status in ACTIVE_STATUSES]
+    merge_check_tasks = [
+        t for t in all_tasks
+        if t.status in MERGE_CHECK_STATUSES and t.pr_number
+    ]
+
+    if not active_tasks and not merge_check_tasks:
         return
 
     async with httpx.AsyncClient(timeout=15.0) as client:
-        for task in active_tasks:
-            await _check_session(task, store, settings, client)
+        # Check Devin sessions for active tasks
+        if active_tasks and settings.devin_api_token:
+            for task in active_tasks:
+                await _check_session(task, store, settings, client)
+
+        # Check GitHub for PR merge status on ready_to_merge tasks
+        if merge_check_tasks and settings.github_token:
+            for task in merge_check_tasks:
+                await _check_pr_merged(task, store, settings, client)
 
 
 async def start_poller(store: TaskStore, settings: Settings) -> None:
