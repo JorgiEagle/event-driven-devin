@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import hmac
 import logging
@@ -96,7 +97,23 @@ async def github_webhook(
         return {"status": "ignored", "reason": f"Action '{action}' not handled"}
 
     # Check for trigger label
-    if not _has_trigger_label(issue, settings.trigger_label):
+    if action == "labeled":
+        # For 'labeled' events, verify the specific label just added is the trigger
+        added_label = payload.get("label", {}).get("name", "")
+        if added_label != settings.trigger_label:
+            logger.info(
+                "Ignoring labeled event for non-trigger label",
+                extra={
+                    "event_type": "issues",
+                    "action": action,
+                    "issue_number": issue.get("number"),
+                    "added_label": added_label,
+                    "trigger_label": settings.trigger_label,
+                    "outcome": "ignored",
+                },
+            )
+            return {"status": "ignored", "reason": f"Added label '{added_label}' is not the trigger"}
+    elif not _has_trigger_label(issue, settings.trigger_label):
         logger.info(
             "Issue missing trigger label",
             extra={
@@ -147,7 +164,7 @@ async def github_webhook(
         },
     )
 
-    # Kickoff the task
-    await kickoff_task(task, store, settings)
+    # Kickoff the task asynchronously so the webhook response is immediate
+    asyncio.create_task(kickoff_task(task, store, settings))
 
     return {"status": "accepted", "task_id": task.id}
