@@ -1,22 +1,35 @@
 {% extends "base.html" %}
 {% block title %}Dashboard - Event-Driven Devin{% endblock %}
 {% block content %}
-{% if webhook_url %}
-<div class="card" style="background: #e8f5e9; border-left: 4px solid #4caf50;">
-    <p style="margin: 0; font-size: 0.9rem;">
-        <strong>Webhook URL:</strong>
-        <code style="background: #fff; padding: 4px 8px; border-radius: 4px; font-size: 0.85rem;">{{ webhook_url }}</code>
-        <span class="meta" style="margin-left: 8px;">Configure this in your GitHub repo &rarr; Settings &rarr; Webhooks</span>
-    </p>
-</div>
-{% else %}
-<div class="card" style="background: #fff3e0; border-left: 4px solid #ff9800;">
-    <p style="margin: 0; font-size: 0.9rem;">
-        <strong>Tunnel not detected.</strong>
-        <span class="meta">Start ngrok to receive GitHub webhooks. Run <code>docker compose up</code> or set <code>NGROK_AUTHTOKEN</code>.</span>
-    </p>
-</div>
-{% endif %}
+<details class="collapsible-card" open>
+    <summary>
+        <h2 style="margin: 0;">Webhook Status
+            {% if webhook_url %}
+            <span class="status-badge" style="background: #e8f5e9; color: #4caf50; margin-left: 8px; font-size: 0.7rem;">Connected</span>
+            {% else %}
+            <span class="status-badge" style="background: #fff3e0; color: #e65100; margin-left: 8px; font-size: 0.7rem;">Not Connected</span>
+            {% endif %}
+        </h2>
+    </summary>
+    <div class="collapsible-body">
+        {% if webhook_url %}
+        <div style="background: #e8f5e9; border-left: 4px solid #4caf50; padding: 12px 16px; border-radius: 4px;">
+            <p style="margin: 0; font-size: 0.9rem;">
+                <strong>Webhook URL:</strong>
+                <code style="background: #fff; padding: 4px 8px; border-radius: 4px; font-size: 0.85rem;">{{ webhook_url }}</code>
+                <span class="meta" style="margin-left: 8px;">Configure this in your GitHub repo &rarr; Settings &rarr; Webhooks</span>
+            </p>
+        </div>
+        {% else %}
+        <div style="background: #fff3e0; border-left: 4px solid #ff9800; padding: 12px 16px; border-radius: 4px;">
+            <p style="margin: 0; font-size: 0.9rem;">
+                <strong>Tunnel not detected.</strong>
+                <span class="meta">Start ngrok to receive GitHub webhooks. Run <code>docker compose up</code> or set <code>NGROK_AUTHTOKEN</code>.</span>
+            </p>
+        </div>
+        {% endif %}
+    </div>
+</details>
 
 <div class="metrics-row">
     <div class="metric-card metric-auto">
