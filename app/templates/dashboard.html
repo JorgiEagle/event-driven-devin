@@ -18,6 +18,25 @@
 </div>
 {% endif %}
 
+<div class="metrics-row">
+    <div class="metric-card metric-auto">
+        <span class="metric-value">{{ resolved_auto }}</span>
+        <span class="metric-label">Resolved Automatically</span>
+    </div>
+    <div class="metric-card metric-manual">
+        <span class="metric-value">{{ resolved_manual }}</span>
+        <span class="metric-label">Resolved Manually</span>
+    </div>
+    <div class="metric-card metric-progress">
+        <span class="metric-value">{{ in_progress }}</span>
+        <span class="metric-label">In Progress</span>
+    </div>
+    <div class="metric-card metric-outstanding">
+        <span class="metric-value">{{ outstanding }}</span>
+        <span class="metric-label">Outstanding</span>
+    </div>
+</div>
+
 <div class="card">
     <h2 style="margin-bottom: 16px;">GitHub Issues <span class="meta">{{ target_repo }}</span></h2>
     {% if issues_with_status %}
