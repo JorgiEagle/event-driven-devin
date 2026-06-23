@@ -12,7 +12,7 @@ from app.config import Settings
 from app.github_client import GitHubClient
 from app.models import Task, TaskStatus
 from app.store import TaskStore
-from app.tasks import kickoff_task
+from app.tasks import kickoff_task, merge_task
 from app.tunnel import get_tunnel_url, get_webhook_url
 
 logger = logging.getLogger(__name__)
@@ -167,4 +167,45 @@ async def manual_kickoff(
     )
 
     await kickoff_task(task, store, settings)
+    return RedirectResponse(url=f"/tasks/{task.id}", status_code=303)
+
+
+@router.post("/tasks/{task_id}/merge")
+async def merge_pr(request: Request, task_id: str) -> RedirectResponse:
+    """Merge the PR associated with a task via the GitHub API."""
+    settings: Settings = request.app.state.settings
+    store: TaskStore = request.app.state.store
+    github = GitHubClient(settings)
+
+    task = store.get(task_id)
+    if not task:
+        return RedirectResponse(url="/", status_code=303)
+
+    if not task.pr_number:
+        logger.warning(
+            "Cannot merge - no PR number on task",
+            extra={"task_id": task_id},
+        )
+        return RedirectResponse(url=f"/tasks/{task.id}", status_code=303)
+
+    merged = await github.merge_pull_request(task.pr_number)
+    if merged:
+        await merge_task(task, store)
+        logger.info(
+            "PR merged from dashboard",
+            extra={
+                "task_id": task.id,
+                "issue_number": task.issue_number,
+                "pr_number": task.pr_number,
+            },
+        )
+    else:
+        logger.warning(
+            "Failed to merge PR from dashboard",
+            extra={
+                "task_id": task.id,
+                "pr_number": task.pr_number,
+            },
+        )
+
     return RedirectResponse(url=f"/tasks/{task.id}", status_code=303)
