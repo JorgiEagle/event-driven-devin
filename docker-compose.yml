@@ -5,6 +5,9 @@ services:
       - "8000:8000"
     volumes:
       - task_data:/data
+    env_file:
+      - path: .env
+        required: false
     environment:
       - EDD_CONFIG_PATH=/app/config.json
     restart: unless-stopped
