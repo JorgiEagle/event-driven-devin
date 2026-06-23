@@ -30,6 +30,13 @@ class GitHubClient:
             headers["Authorization"] = f"Bearer {self._token}"
         return headers
 
+    @property
+    def _unauthenticated_headers(self) -> dict[str, str]:
+        return {
+            "Accept": "application/vnd.github+json",
+            "X-GitHub-Api-Version": "2022-11-28",
+        }
+
     async def list_issues(
         self, state: str = "open", labels: str = "", per_page: int = 50
     ) -> list[dict[str, Any]]:
@@ -61,6 +68,15 @@ class GitHubClient:
         try:
             async with httpx.AsyncClient(timeout=15.0) as client:
                 response = await client.get(url, headers=self._headers, params=params)
+
+                if response.status_code == 401 and self._token:
+                    logger.warning(
+                        "GitHub token returned 401, retrying without auth",
+                        extra={"repo": self._repo},
+                    )
+                    response = await client.get(
+                        url, headers=self._unauthenticated_headers, params=params
+                    )
 
                 if response.status_code == 401:
                     logger.error(
@@ -106,6 +122,16 @@ class GitHubClient:
         try:
             async with httpx.AsyncClient(timeout=15.0) as client:
                 response = await client.get(url, headers=self._headers)
+
+                if response.status_code == 401 and self._token:
+                    logger.warning(
+                        "GitHub token returned 401, retrying without auth",
+                        extra={"repo": self._repo, "issue_number": issue_number},
+                    )
+                    response = await client.get(
+                        url, headers=self._unauthenticated_headers
+                    )
+
                 if response.status_code == 200:
                     return response.json()
                 logger.warning(
