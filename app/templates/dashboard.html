@@ -37,8 +37,11 @@
     </div>
 </div>
 
-<div class="card">
-    <h2 style="margin-bottom: 16px;">GitHub Issues <span class="meta">{{ target_repo }}</span></h2>
+<details class="collapsible-card" open>
+    <summary>
+        <h2 style="margin: 0;">GitHub Issues <span class="meta">{{ target_repo }}</span></h2>
+    </summary>
+    <div class="collapsible-body">
     {% if issues_with_status %}
     <table>
         <thead>
@@ -94,10 +97,14 @@
         {% endif %}
     </p>
     {% endif %}
-</div>
+    </div>
+</details>
 
-<div class="card">
-    <h2 style="margin-bottom: 16px;">Task History</h2>
+<details class="collapsible-card" open>
+    <summary>
+        <h2 style="margin: 0;">Task History</h2>
+    </summary>
+    <div class="collapsible-body">
     {% if tasks %}
     <table>
         <thead>
@@ -136,5 +143,6 @@
     {% else %}
     <p style="color: #888; text-align: center; padding: 40px 0;">No tasks yet. Kick off a task from the issues table above or send a webhook event.</p>
     {% endif %}
-</div>
+    </div>
+</details>
 {% endblock %}
