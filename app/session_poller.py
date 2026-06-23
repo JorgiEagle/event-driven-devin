@@ -21,7 +21,7 @@ ACTIVE_STATUSES = {TaskStatus.RESOLVING, TaskStatus.QUEUED}
 
 def _extract_session_id(session_url: str) -> Optional[str]:
     """Extract the session ID from a Devin session URL."""
-    match = re.search(r"/sessions/([a-f0-9]+)$", session_url)
+    match = re.search(r"/sessions/([a-zA-Z0-9_-]+)", session_url)
     if match:
         return match.group(1)
     return None
@@ -39,15 +39,7 @@ def _extract_test_result(messages: list[dict[str, Any]]) -> tuple[Optional[str],
         text = msg.get("message", "")
         text_lower = text.lower()
 
-        # Look for explicit test result indicators
-        if any(phrase in text_lower for phrase in [
-            "tests passed", "test passed", "all tests pass",
-            "tests are passing", "ci passed", "ci is passing",
-            "passing ci", "build passed",
-        ]):
-            summary = _truncate(text, 200)
-            return "passed", summary
-
+        # Check failure first — a partial failure should be treated as failure
         if any(phrase in text_lower for phrase in [
             "tests failed", "test failed", "tests are failing",
             "ci failed", "ci is failing", "build failed",
@@ -55,6 +47,14 @@ def _extract_test_result(messages: list[dict[str, Any]]) -> tuple[Optional[str],
         ]):
             summary = _truncate(text, 200)
             return "failed", summary
+
+        if any(phrase in text_lower for phrase in [
+            "tests passed", "test passed", "all tests pass",
+            "tests are passing", "ci passed", "ci is passing",
+            "passing ci", "build passed",
+        ]):
+            summary = _truncate(text, 200)
+            return "passed", summary
 
     return None, None
 

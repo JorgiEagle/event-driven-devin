@@ -75,8 +75,8 @@ def create_app() -> FastAPI:
         else:
             logger.info("No tunnel detected - webhook will not receive external events")
 
-        # Start background session poller
-        asyncio.create_task(start_poller(app.state.store, settings))
+        # Start background session poller (store ref to prevent GC)
+        app.state._poller_task = asyncio.create_task(start_poller(app.state.store, settings))
 
     logger.info(
         "Application started",
