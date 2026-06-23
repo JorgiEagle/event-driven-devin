@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 
 from fastapi import APIRouter, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
 from app.config import Settings
@@ -20,30 +20,21 @@ templates = Jinja2Templates(directory="app/templates")
 router = APIRouter()
 
 
-@router.get("/", response_class=HTMLResponse)
-async def dashboard(request: Request) -> HTMLResponse:
-    """Render the dashboard with issues fetched from GitHub and task statuses."""
-    settings: Settings = request.app.state.settings
-    store: TaskStore = request.app.state.store
+async def _gather_dashboard_data(
+    settings: Settings, store: TaskStore,
+) -> tuple[list[dict], list[Task], dict]:
+    """Collect issues, tasks and metrics used by both the HTML and JSON views."""
     github = GitHubClient(settings)
-
-    # Fetch open issues from the target repo
     issues = await github.list_issues(state="open")
 
-    # Annotate issues with their task status (if a task exists)
     issues_with_status = []
     for issue in issues:
         issue_number = issue.get("number", 0)
         task = store.get_by_issue(settings.target_repo, issue_number)
-        issues_with_status.append({
-            "issue": issue,
-            "task": task,
-        })
+        issues_with_status.append({"issue": issue, "task": task})
 
-    # Also get tasks (for the task history section)
     tasks = store.list_all()
 
-    # Compute metric card counts
     in_progress_statuses = {
         TaskStatus.READY,
         TaskStatus.QUEUED,
@@ -69,7 +60,23 @@ async def dashboard(request: Request) -> HTMLResponse:
         if entry["issue"].get("number") not in in_progress_issue_numbers
     )
 
-    # Discover tunnel URL for webhook configuration
+    metrics = {
+        "resolved_auto": resolved_auto,
+        "resolved_manual": resolved_manual,
+        "in_progress": in_progress,
+        "outstanding": outstanding,
+    }
+    return issues_with_status, tasks, metrics
+
+
+@router.get("/", response_class=HTMLResponse)
+async def dashboard(request: Request) -> HTMLResponse:
+    """Render the dashboard with issues fetched from GitHub and task statuses."""
+    settings: Settings = request.app.state.settings
+    store: TaskStore = request.app.state.store
+
+    issues_with_status, tasks, metrics = await _gather_dashboard_data(settings, store)
+
     tunnel_url = await get_tunnel_url()
     webhook_url = get_webhook_url(tunnel_url)
 
@@ -81,12 +88,54 @@ async def dashboard(request: Request) -> HTMLResponse:
             "tasks": tasks,
             "target_repo": settings.target_repo,
             "webhook_url": webhook_url,
-            "resolved_auto": resolved_auto,
-            "resolved_manual": resolved_manual,
-            "in_progress": in_progress,
-            "outstanding": outstanding,
+            **metrics,
         },
     )
+
+
+@router.get("/api/dashboard", response_class=JSONResponse)
+async def dashboard_json(request: Request) -> JSONResponse:
+    """Return dashboard data as JSON for live polling."""
+    settings: Settings = request.app.state.settings
+    store: TaskStore = request.app.state.store
+
+    issues_with_status, tasks, metrics = await _gather_dashboard_data(settings, store)
+
+    def _task_json(t: Task) -> dict:
+        return {
+            "id": t.id,
+            "issue_number": t.issue_number,
+            "issue_title": t.issue_title,
+            "issue_url": t.issue_url or "",
+            "status": t.status.value,
+            "trigger": t.trigger or "",
+            "test_result": t.test_result or "",
+            "test_summary": t.test_summary or "",
+            "pr_url": t.pr_url or "",
+            "pr_number": t.pr_number,
+            "devin_session_url": t.devin_session_url or "",
+        }
+
+    issues_json = []
+    for entry in issues_with_status:
+        issue = entry["issue"]
+        task = entry["task"]
+        issues_json.append({
+            "number": issue.get("number", 0),
+            "title": issue.get("title", ""),
+            "html_url": issue.get("html_url", ""),
+            "labels": [
+                {"name": l.get("name", ""), "color": l.get("color", "ededed")}
+                for l in issue.get("labels", [])
+            ],
+            "task": _task_json(task) if task else None,
+        })
+
+    return JSONResponse({
+        "metrics": metrics,
+        "issues": issues_json,
+        "tasks": [_task_json(t) for t in tasks],
+    })
 
 
 @router.get("/tasks/{task_id}", response_class=HTMLResponse)
