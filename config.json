@@ -1,5 +1,5 @@
 {
-  "target_repo": "owner/repo",
+  "target_repo": "JorgiEagle/event-driven-devin",
   "trigger_label": "assign-devin",
   "log_level": "INFO",
   "data_dir": "./data"
