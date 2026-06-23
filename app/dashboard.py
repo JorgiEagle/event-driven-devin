@@ -94,15 +94,16 @@ async def task_detail(request: Request, task_id: str) -> HTMLResponse:
     """Render task detail with full status history."""
     store: TaskStore = request.app.state.store
     task = store.get(task_id)
+    settings: Settings = request.app.state.settings
     if not task:
         return templates.TemplateResponse(
             "error.html",
-            {"request": request, "message": "Task not found"},
+            {"request": request, "message": "Task not found", "target_repo": settings.target_repo},
             status_code=404,
         )
     return templates.TemplateResponse(
         "task_detail.html",
-        {"request": request, "task": task},
+        {"request": request, "task": task, "target_repo": settings.target_repo},
     )
 
 
