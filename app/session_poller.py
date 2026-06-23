@@ -15,7 +15,7 @@ from app.store import TaskStore
 
 logger = logging.getLogger(__name__)
 
-POLL_INTERVAL_SECONDS = 30
+POLL_INTERVAL_SECONDS = 10
 ACTIVE_STATUSES = {TaskStatus.RESOLVING, TaskStatus.QUEUED}
 
 
@@ -93,6 +93,10 @@ async def _check_github_pr_status(
         # Check if PR is merged
         if pr_data.get("merged"):
             return "merged"
+
+        # Check if PR was closed without merging
+        if pr_data.get("state") == "closed" and not pr_data.get("merged"):
+            return "closed"
 
         # Check mergeable_state for CI status
         mergeable_state = pr_data.get("mergeable_state", "")
@@ -201,6 +205,14 @@ async def _check_session(
                     reason="Devin session was stopped — PR may contain incomplete work",
                 )
                 store.update(task)
+                logger.warning(
+                    "Session stopped with PR (incomplete work)",
+                    extra={
+                        "task_id": task.id,
+                        "issue_number": task.issue_number,
+                        "pr_url": pr_url,
+                    },
+                )
             elif pr_url:
                 task.pr_url = pr_url
                 task.pr_number = pr_number
@@ -224,6 +236,13 @@ async def _check_session(
                         task.test_summary = "CI checks failed on PR"
                     elif ci_status == "merged":
                         task.transition_to(TaskStatus.MERGED, reason="PR already merged")
+                        store.update(task)
+                        return
+                    elif ci_status == "closed":
+                        task.transition_to(
+                            TaskStatus.FAILED,
+                            reason="PR was closed without merging",
+                        )
                         store.update(task)
                         return
 
@@ -254,6 +273,13 @@ async def _check_session(
                     reason="Devin session was stopped",
                 )
                 store.update(task)
+                logger.warning(
+                    "Session stopped without PR",
+                    extra={
+                        "task_id": task.id,
+                        "issue_number": task.issue_number,
+                    },
+                )
             else:
                 task.transition_to(
                     TaskStatus.ATTENTION_REQUIRED,
@@ -373,6 +399,10 @@ async def poll_active_sessions(store: TaskStore, settings: Settings) -> None:
         t for t in all_tasks
         if t.status in MERGE_CHECK_STATUSES and t.pr_number
     ]
+    # Also check GitHub PRs for active (RESOLVING/QUEUED) tasks that have a
+    # known PR — the Devin session may never reach terminal state but the PR
+    # can still be merged or closed independently on GitHub.
+    active_with_pr = [t for t in active_tasks if t.pr_number]
 
     if not active_tasks and not merge_check_tasks:
         return
@@ -386,6 +416,15 @@ async def poll_active_sessions(store: TaskStore, settings: Settings) -> None:
         # Check GitHub for PR merge status on ready_to_merge tasks
         if merge_check_tasks and settings.github_token:
             for task in merge_check_tasks:
+                await _check_pr_merged(task, store, settings, client)
+
+        # Parallel GitHub check for active tasks whose PR may have been
+        # merged/closed while the Devin session is still running
+        if active_with_pr and settings.github_token:
+            for task in active_with_pr:
+                # Skip if _check_session already transitioned this task
+                if task.status not in ACTIVE_STATUSES:
+                    continue
                 await _check_pr_merged(task, store, settings, client)
 
 
