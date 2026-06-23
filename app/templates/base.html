@@ -150,6 +150,34 @@
         .metric-progress .metric-value { color: #1565c0; }
         .metric-outstanding { border-top-color: #e65100; }
         .metric-outstanding .metric-value { color: #e65100; }
+        details.collapsible-card {
+            background: #fff;
+            border-radius: 8px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            margin-bottom: 16px;
+        }
+        details.collapsible-card summary {
+            padding: 20px;
+            cursor: pointer;
+            user-select: none;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            list-style: none;
+        }
+        details.collapsible-card summary::-webkit-details-marker { display: none; }
+        details.collapsible-card summary::after {
+            content: '\25B6';
+            font-size: 0.7rem;
+            color: #888;
+            transition: transform 0.2s;
+        }
+        details.collapsible-card[open] summary::after {
+            transform: rotate(90deg);
+        }
+        details.collapsible-card .collapsible-body {
+            padding: 0 20px 20px;
+        }
     </style>
 </head>
 <body>
@@ -158,6 +186,10 @@
             <h1><a href="/">Event-Driven Devin</a></h1>
             <nav>
                 <a href="/">Dashboard</a>
+                {% if target_repo %}
+                <a href="https://github.com/{{ target_repo }}" target="_blank">GitHub Repo</a>
+                <a href="https://github.com/{{ target_repo }}/issues/new" target="_blank" class="btn btn-primary btn-sm" style="margin-left: 8px;">Create Issue</a>
+                {% endif %}
             </nav>
         </div>
     </header>
