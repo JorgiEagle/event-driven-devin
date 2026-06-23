@@ -53,9 +53,11 @@
                     {% endif %}
                 </td>
                 <td style="display: flex; gap: 6px; align-items: center;">
+                    {% if not task or task.status.value in ['failed', 'merged'] %}
                     <form method="POST" action="/tasks/kickoff/{{ issue.number }}" style="margin: 0;">
                         <button type="submit" class="btn btn-primary btn-sm">Kick Off</button>
                     </form>
+                    {% endif %}
                     {% if task %}
                     <a href="/tasks/{{ task.id }}" class="btn btn-secondary btn-sm">View Task</a>
                     {% endif %}
