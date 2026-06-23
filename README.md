@@ -225,7 +225,7 @@ All logs are structured JSON:
 pip install -r requirements.txt
 cp .env.example .env
 # Edit .env with your tokens
-source .env
+set -a; source .env; set +a
 EDD_CONFIG_PATH=config.json uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
