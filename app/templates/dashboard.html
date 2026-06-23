@@ -100,7 +100,7 @@
             {% endfor %}
         </tbody>
     </table>
-    <p id="issues-empty" {% if issues_with_status %}style="display:none"{% endif %} style="color: #888; text-align: center; padding: 40px 0;">
+    <p id="issues-empty" style="{% if issues_with_status %}display:none;{% endif %}color: #888; text-align: center; padding: 40px 0;">
         {% if target_repo %}
         No open issues found in {{ target_repo }}. Check that the repository exists and the GitHub token has read access.
         {% else %}
@@ -168,7 +168,7 @@
             {% endfor %}
         </tbody>
     </table>
-    <p id="tasks-empty" {% if tasks %}style="display:none"{% endif %} style="color: #888; text-align: center; padding: 40px 0;">No tasks yet. Kick off a task from the issues table above or send a webhook event.</p>
+    <p id="tasks-empty" style="{% if tasks %}display:none;{% endif %}color: #888; text-align: center; padding: 40px 0;">No tasks yet. Kick off a task from the issues table above or send a webhook event.</p>
     </div>
 </details>
 <script>
