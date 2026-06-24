@@ -1,5 +1,5 @@
 {
-  "target_repo": "JorgiEagle/event-driven-devin",
+  "target_repo": "JorgiEagle/superset",
   "trigger_label": "assign-devin",
   "log_level": "INFO",
   "data_dir": "./data"
