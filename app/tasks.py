@@ -33,10 +33,11 @@ async def kickoff_task(task: Task, store: TaskStore, settings: Settings) -> Task
     )
 
     # Attempt to start Devin session
-    session_url = await _start_devin_session(task, settings)
+    session_data = await _start_devin_session(task, settings)
 
-    if session_url:
-        task.devin_session_url = session_url
+    if session_data:
+        task.devin_session_id = session_data["session_id"]
+        task.devin_session_url = session_data["url"]
         task.transition_to(TaskStatus.RESOLVING, reason="Devin session started")
         logger.info(
             "Devin session started",
@@ -46,7 +47,8 @@ async def kickoff_task(task: Task, store: TaskStore, settings: Settings) -> Task
                 "repo": task.repo,
                 "event_type": task.trigger,
                 "state": task.status.value,
-                "devin_session_url": session_url,
+                "devin_session_id": session_data["session_id"],
+                "devin_session_url": session_data["url"],
             },
         )
     else:
@@ -132,10 +134,10 @@ async def fail_task(task: Task, store: TaskStore, reason: str = "") -> Task:
     return task
 
 
-async def _start_devin_session(task: Task, settings: Settings) -> Optional[str]:
+async def _start_devin_session(task: Task, settings: Settings) -> Optional[dict[str, str]]:
     """Call the Devin API to start a session for the issue.
 
-    Returns the session URL on success, None on failure.
+    Returns {"session_id": ..., "url": ...} on success, None on failure.
     """
     if not settings.devin_api_token:
         logger.warning(
@@ -170,7 +172,15 @@ async def _start_devin_session(task: Task, settings: Settings) -> Optional[str]:
             )
             if response.status_code in (200, 201):
                 data = response.json()
-                return data.get("url", data.get("session_url", ""))
+                session_id = data.get("session_id", "")
+                url = data.get("url", "")
+                if session_id:
+                    return {"session_id": session_id, "url": url}
+                logger.warning(
+                    "Devin API response missing session_id",
+                    extra={"task_id": task.id, "response_keys": list(data.keys())},
+                )
+                return None
             logger.warning(
                 "Devin API returned non-success status",
                 extra={

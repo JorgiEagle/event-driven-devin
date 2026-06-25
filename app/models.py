@@ -41,6 +41,7 @@ class Task(BaseModel):
     repo: str = ""
     status: TaskStatus = TaskStatus.READY
     trigger: str = "webhook"  # "webhook" or "manual"
+    devin_session_id: Optional[str] = None
     devin_session_url: Optional[str] = None
     pr_url: Optional[str] = None
     pr_number: Optional[int] = None
