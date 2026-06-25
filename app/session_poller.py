@@ -117,16 +117,13 @@ async def _check_session(
     client: httpx.AsyncClient,
 ) -> None:
     """Check a single Devin session and update task status accordingly."""
-    if not task.devin_session_url:
-        return
-
-    session_id = _extract_session_id(task.devin_session_url)
+    session_id = task.devin_session_id
     if not session_id:
-        logger.warning(
-            "Could not extract session ID from URL",
-            extra={"task_id": task.id, "url": task.devin_session_url},
-        )
-        return
+        # Fallback for tasks created before devin_session_id was stored
+        if task.devin_session_url:
+            session_id = _extract_session_id(task.devin_session_url)
+        if not session_id:
+            return
 
     try:
         response = await client.get(
