@@ -103,6 +103,23 @@ async def task_detail(request: Request, task_id: str) -> HTMLResponse:
     )
 
 
+@router.get("/tasks/{task_id}/panel", response_class=HTMLResponse)
+async def task_panel(request: Request, task_id: str) -> HTMLResponse:
+    """Render just the task detail fragment for the dashboard's right pane."""
+    store: TaskStore = request.app.state.store
+    settings: Settings = request.app.state.settings
+    task = store.get(task_id)
+    if not task:
+        return HTMLResponse(
+            '<div class="card"><p class="meta">Task not found.</p></div>',
+            status_code=404,
+        )
+    return templates.TemplateResponse(
+        "_task_panel.html",
+        {"request": request, "task": task, "target_repo": settings.target_repo},
+    )
+
+
 @router.post("/tasks/begin/{issue_number}")
 async def begin_task(
     request: Request,

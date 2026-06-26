@@ -46,6 +46,8 @@
     </div>
 </div>
 
+<div class="split-view">
+<div class="list-pane" id="list-pane">
 <details class="collapsible-card" open>
     <summary>
         <h2 style="margin: 0;">GitHub Issues <span class="meta">{{ target_repo }}</span></h2>
@@ -66,7 +68,7 @@
             {% for entry in issues_with_status %}
             {% set issue = entry.issue %}
             {% set task = entry.task %}
-            <tr>
+            <tr {% if task %}data-task-row="{{ task.id }}"{% endif %}>
                 <td><a href="{{ issue.html_url }}" target="_blank">#{{ issue.number }}</a></td>
                 <td>{{ issue.title }}</td>
                 <td>
@@ -76,7 +78,7 @@
                 </td>
                 <td>
                     {% if task %}
-                    <a href="/tasks/{{ task.id }}">
+                    <a href="/tasks/{{ task.id }}" class="task-link" data-task-id="{{ task.id }}">
                         <span class="status-badge status-{{ task.status.value }}">{{ task.status.value | replace('_', ' ') }}</span>
                     </a>
                     {% else %}
@@ -90,7 +92,7 @@
                     </form>
                     {% endif %}
                     {% if task %}
-                    <a href="/tasks/{{ task.id }}" class="btn btn-secondary btn-sm">View Task</a>
+                    <a href="/tasks/{{ task.id }}" class="btn btn-secondary btn-sm task-link" data-task-id="{{ task.id }}">View Task</a>
                     {% endif %}
                 </td>
             </tr>
@@ -129,9 +131,9 @@
         </thead>
         <tbody>
             {% for task in tasks %}
-            <tr>
-                <td><a href="/tasks/{{ task.id }}">#{{ task.issue_number }}</a></td>
-                <td><a href="/tasks/{{ task.id }}">{{ task.issue_title }}</a></td>
+            <tr data-task-row="{{ task.id }}">
+                <td><a href="/tasks/{{ task.id }}" class="task-link" data-task-id="{{ task.id }}">#{{ task.issue_number }}</a></td>
+                <td><a href="/tasks/{{ task.id }}" class="task-link" data-task-id="{{ task.id }}">{{ task.issue_title }}</a></td>
                 <td>
                     <span class="status-badge status-{{ task.status.value }}">{{ task.status.value | replace('_', ' ') }}</span>
                     {% if task.confidence_label %}
@@ -167,7 +169,7 @@
                         <button type="submit" class="btn btn-primary btn-sm">Merge PR</button>
                     </form>
                     {% endif %}
-                    <a href="/tasks/{{ task.id }}" class="btn btn-secondary btn-sm">View</a>
+                    <a href="/tasks/{{ task.id }}" class="btn btn-secondary btn-sm task-link" data-task-id="{{ task.id }}">View</a>
                 </td>
             </tr>
             {% endfor %}
@@ -178,4 +180,65 @@
     {% endif %}
     </div>
 </details>
+</div>
+
+<div class="detail-pane" id="task-panel">
+    <div class="card">
+        <p class="meta">Select a task from the list to view its details here.</p>
+    </div>
+</div>
+</div>
+
+<script>
+(function () {
+    const panel = document.getElementById("task-panel");
+
+    function markActive(taskId) {
+        document.querySelectorAll("tr.task-row-active").forEach(function (row) {
+            row.classList.remove("task-row-active");
+        });
+        document.querySelectorAll('[data-task-row="' + taskId + '"]').forEach(function (row) {
+            row.classList.add("task-row-active");
+        });
+    }
+
+    async function loadPanel(taskId) {
+        panel.dataset.taskId = taskId;
+        markActive(taskId);
+        const res = await fetch("/tasks/" + taskId + "/panel");
+        panel.innerHTML = await res.text();
+    }
+
+    async function refreshList() {
+        const res = await fetch("/");
+        const html = await res.text();
+        const doc = new DOMParser().parseFromString(html, "text/html");
+        const fresh = doc.getElementById("list-pane");
+        if (fresh) {
+            document.getElementById("list-pane").innerHTML = fresh.innerHTML;
+            if (panel.dataset.taskId) markActive(panel.dataset.taskId);
+        }
+    }
+
+    document.addEventListener("click", function (e) {
+        const link = e.target.closest(".task-link");
+        if (link) {
+            e.preventDefault();
+            loadPanel(link.dataset.taskId);
+        }
+    });
+
+    document.addEventListener("submit", async function (e) {
+        const form = e.target;
+        if (!form.matches("form[method='POST'], form[method='post']")) return;
+        e.preventDefault();
+        await fetch(form.action, { method: "POST", body: new FormData(form) });
+        const inPanel = panel.contains(form);
+        if (inPanel && panel.dataset.taskId) {
+            await loadPanel(panel.dataset.taskId);
+        }
+        await refreshList();
+    });
+})();
+</script>
 {% endblock %}
