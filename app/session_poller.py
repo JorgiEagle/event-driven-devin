@@ -341,6 +341,14 @@ async def _check_session(
                 # Gate 2: PR is ready — surface the Devin Review comments + test
                 # results and let the user merge or request changes.
                 task.review_summary = await _build_review_summary(task, settings)
+                # Re-check status after await — another handler may have
+                # transitioned the task while we were fetching review comments
+                if task.status not in ACTIVE_STATUSES:
+                    logger.info(
+                        "Task status changed during review summary fetch, skipping",
+                        extra={"task_id": task.id, "current_status": task.status.value},
+                    )
+                    return
                 task.transition_to(
                     TaskStatus.AWAITING_REVIEW,
                     reason="Implementation complete — PR ready for review",

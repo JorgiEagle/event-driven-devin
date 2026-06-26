@@ -96,6 +96,12 @@ async def approve_task(
     Transitions: awaiting_review -> implementing on success.
     Returns True if the approval message was delivered.
     """
+    if task.status != TaskStatus.AWAITING_REVIEW or task.is_gate_two:
+        logger.warning(
+            "approve_task called on task not at the plan-review gate",
+            extra={"task_id": task.id, "current_status": task.status.value},
+        )
+        return False
     if plan_markdown:
         task.plan_markdown = plan_markdown
     approved_plan = task.plan_markdown or (task.plan.to_markdown() if task.plan else "")
@@ -147,6 +153,12 @@ async def request_changes(
     Gate 2 (PR set): awaiting_review -> implementing  (re-implement with feedback).
     Returns True if the feedback message was delivered.
     """
+    if task.status != TaskStatus.AWAITING_REVIEW:
+        logger.warning(
+            "request_changes called on task not awaiting review",
+            extra={"task_id": task.id, "current_status": task.status.value},
+        )
+        return False
     gate_two = task.is_gate_two
     if gate_two:
         message = (
