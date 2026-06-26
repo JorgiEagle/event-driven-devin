@@ -12,6 +12,11 @@ from app.config import Settings
 logger = logging.getLogger(__name__)
 
 
+def _is_devin_bot(login: str) -> bool:
+    """Return True if a comment author login looks like a Devin bot."""
+    return "devin" in login.lower()
+
+
 class GitHubClient:
     """Reads issues from the configured target repository via GitHub API."""
 
@@ -175,6 +180,101 @@ class GitHubClient:
                 },
             )
         return None
+
+    async def add_label(self, issue_number: int, label: str) -> bool:
+        """Add a label to an issue (used by the dashboard's Begin button).
+
+        Adding the trigger label causes GitHub to fire an ``issues.labeled``
+        webhook, which is the single entry point for task creation.
+        Returns True on success.
+        """
+        if not self._repo:
+            return False
+
+        url = f"{self._base_url}/repos/{self._repo}/issues/{issue_number}/labels"
+
+        try:
+            async with httpx.AsyncClient(timeout=15.0) as client:
+                response = await client.post(
+                    url, headers=self._headers, json={"labels": [label]}
+                )
+                if response.status_code in (200, 201):
+                    logger.info(
+                        "Label added to issue",
+                        extra={
+                            "repo": self._repo,
+                            "issue_number": issue_number,
+                            "label": label,
+                        },
+                    )
+                    return True
+                logger.warning(
+                    "Failed to add label to issue",
+                    extra={
+                        "repo": self._repo,
+                        "issue_number": issue_number,
+                        "label": label,
+                        "status_code": response.status_code,
+                        "response": response.text[:300],
+                    },
+                )
+        except Exception as exc:
+            logger.error(
+                "GitHub API add-label request failed",
+                extra={
+                    "repo": self._repo,
+                    "issue_number": issue_number,
+                    "error": str(exc),
+                },
+            )
+        return False
+
+    async def get_pr_review_comments(self, pr_number: int) -> list[dict[str, Any]]:
+        """Fetch Devin Review bot comments on a PR via the GitHub API.
+
+        Combines PR-level reviews, inline review comments, and issue comments,
+        keeping only those authored by a Devin bot. Each entry is normalized to
+        ``{"author": ..., "body": ..., "url": ...}``.
+        """
+        if not self._repo:
+            return []
+
+        endpoints = [
+            f"{self._base_url}/repos/{self._repo}/pulls/{pr_number}/reviews",
+            f"{self._base_url}/repos/{self._repo}/pulls/{pr_number}/comments",
+            f"{self._base_url}/repos/{self._repo}/issues/{pr_number}/comments",
+        ]
+
+        comments: list[dict[str, Any]] = []
+        try:
+            async with httpx.AsyncClient(timeout=15.0) as client:
+                for url in endpoints:
+                    response = await client.get(url, headers=self._headers)
+                    if response.status_code != 200:
+                        continue
+                    for item in response.json():
+                        user = item.get("user") or {}
+                        login = user.get("login", "")
+                        body = (item.get("body") or "").strip()
+                        if not body:
+                            continue
+                        if not _is_devin_bot(login):
+                            continue
+                        comments.append({
+                            "author": login,
+                            "body": body,
+                            "url": item.get("html_url", ""),
+                        })
+        except Exception as exc:
+            logger.error(
+                "GitHub API review-comments request failed",
+                extra={
+                    "repo": self._repo,
+                    "pr_number": pr_number,
+                    "error": str(exc),
+                },
+            )
+        return comments
 
     async def get_issue(self, issue_number: int) -> dict[str, Any] | None:
         """Fetch a single issue by number."""

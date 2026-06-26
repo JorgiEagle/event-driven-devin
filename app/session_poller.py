@@ -10,13 +10,22 @@ from typing import Any, Optional
 import httpx
 
 from app.config import Settings
+from app.github_client import GitHubClient
 from app.models import Task, TaskStatus
 from app.store import TaskStore
+from app.tasks import parse_plan
 
 logger = logging.getLogger(__name__)
 
 POLL_INTERVAL_SECONDS = 10
-ACTIVE_STATUSES = {TaskStatus.RESOLVING, TaskStatus.QUEUED}
+# Statuses the poller actively watches against the Devin API.
+# PLANNING -> waiting for the structured plan; IMPLEMENTING -> waiting for a PR.
+# RESOLVING is retained for backward compatibility with legacy tasks.
+ACTIVE_STATUSES = {
+    TaskStatus.PLANNING,
+    TaskStatus.IMPLEMENTING,
+    TaskStatus.RESOLVING,
+}
 
 
 def _extract_session_id(session_url: str) -> Optional[str]:
@@ -110,6 +119,83 @@ async def _check_github_pr_status(
     return None
 
 
+async def _handle_planning_session(
+    task: Task,
+    store: TaskStore,
+    structured_output: Optional[dict[str, Any]],
+    session_status: str,
+) -> None:
+    """Stage 1: capture the structured plan and move to the Gate-1 review.
+
+    The planning prompt instructs Devin to return the plan via structured
+    output and then wait. We capture the plan as soon as it appears (the
+    session may still be ``blocked``/``working``). If the session reaches a
+    terminal state without producing a plan, flag it for attention.
+    """
+    if isinstance(structured_output, dict) and structured_output:
+        plan = parse_plan(structured_output)
+        task.plan = plan
+        task.plan_markdown = plan.to_markdown()
+        task.transition_to(
+            TaskStatus.AWAITING_REVIEW,
+            reason="Plan ready for review",
+        )
+        store.update(task)
+        logger.info(
+            "Plan captured, awaiting review",
+            extra={
+                "task_id": task.id,
+                "issue_number": task.issue_number,
+                "state": task.status.value,
+                "confidence": plan.confidence,
+            },
+        )
+        return
+
+    if session_status in ("finished", "stopped", "expired"):
+        task.transition_to(
+            TaskStatus.ATTENTION_REQUIRED,
+            reason="Planning session ended without producing a plan",
+        )
+        store.update(task)
+        logger.warning(
+            "Planning session ended without a plan",
+            extra={
+                "task_id": task.id,
+                "issue_number": task.issue_number,
+                "session_status": session_status,
+            },
+        )
+
+
+async def _build_review_summary(task: Task, settings: Settings) -> str:
+    """Assemble a Gate-2 review summary: Devin Review comments + test results."""
+    parts: list[str] = []
+
+    if task.test_result:
+        parts.append(
+            f"**Tests:** {task.test_result.upper()} — "
+            f"{task.test_summary or 'see PR for details'}"
+        )
+
+    if task.pr_number and settings.github_token:
+        client = GitHubClient(settings)
+        if task.repo:
+            client._repo = task.repo
+        try:
+            comments = await client.get_pr_review_comments(task.pr_number)
+        except Exception:
+            comments = []
+        if comments:
+            parts.append(f"**Devin Review ({len(comments)} comment(s)):**")
+            for c in comments:
+                parts.append(f"- _{c['author']}_: {_truncate(c['body'], 500)}")
+        else:
+            parts.append("**Devin Review:** no review comments found yet.")
+
+    return "\n\n".join(parts) if parts else "No review details available yet."
+
+
 async def _check_session(
     task: Task,
     store: TaskStore,
@@ -151,6 +237,7 @@ async def _check_session(
         session_status = data.get("status_enum", data.get("status", ""))
         pr_info = data.get("pull_request")
         pr_url = pr_info.get("url", "") if isinstance(pr_info, dict) else ""
+        structured_output = data.get("structured_output")
         messages = data.get("messages", [])
 
         # Extract PR number from URL
@@ -159,6 +246,14 @@ async def _check_session(
             pr_match = re.search(r"/pull/(\d+)$", pr_url)
             if pr_match:
                 pr_number = int(pr_match.group(1))
+
+        # Stage 1: planning session — capture the structured plan and move to
+        # the Gate-1 review. Handled separately from the PR-based lifecycle.
+        if task.status == TaskStatus.PLANNING:
+            await _handle_planning_session(
+                task, store, structured_output, session_status
+            )
+            return
 
         # Update PR info on task if newly discovered
         if pr_url and not task.pr_url:
@@ -243,16 +338,13 @@ async def _check_session(
                         store.update(task)
                         return
 
-                if task.test_result == "failed":
-                    task.transition_to(
-                        TaskStatus.ATTENTION_REQUIRED,
-                        reason=f"Tests failed: {task.test_summary or 'check PR for details'}",
-                    )
-                else:
-                    task.transition_to(
-                        TaskStatus.READY_TO_MERGE,
-                        reason="Devin session completed, PR ready for review",
-                    )
+                # Gate 2: PR is ready — surface the Devin Review comments + test
+                # results and let the user merge or request changes.
+                task.review_summary = await _build_review_summary(task, settings)
+                task.transition_to(
+                    TaskStatus.AWAITING_REVIEW,
+                    reason="Implementation complete — PR ready for review",
+                )
                 store.update(task)
                 logger.info(
                     "Task updated after session completion",
@@ -291,8 +383,11 @@ async def _check_session(
                     },
                 )
 
-        elif session_status == "running" and pr_url and task.status == TaskStatus.RESOLVING:
-            # Session still running but PR created — update PR info, stay in resolving
+        elif session_status == "running" and pr_url and task.status in (
+            TaskStatus.IMPLEMENTING,
+            TaskStatus.RESOLVING,
+        ):
+            # Session still running but PR created — update PR info, stay active
             # (session may still be testing)
             task.pr_url = pr_url
             task.pr_number = pr_number
@@ -384,7 +479,11 @@ async def _check_pr_merged(
         )
 
 
-MERGE_CHECK_STATUSES = {TaskStatus.READY_TO_MERGE, TaskStatus.ATTENTION_REQUIRED}
+MERGE_CHECK_STATUSES = {
+    TaskStatus.AWAITING_REVIEW,
+    TaskStatus.ATTENTION_REQUIRED,
+    TaskStatus.READY_TO_MERGE,
+}
 
 
 async def poll_active_sessions(store: TaskStore, settings: Settings) -> None:

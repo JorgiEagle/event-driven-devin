@@ -33,12 +33,8 @@
 
 <div class="metrics-row">
     <div class="metric-card metric-auto">
-        <span class="metric-value">{{ resolved_auto }}</span>
-        <span class="metric-label">Resolved Automatically</span>
-    </div>
-    <div class="metric-card metric-manual">
-        <span class="metric-value">{{ resolved_manual }}</span>
-        <span class="metric-label">Resolved Manually</span>
+        <span class="metric-value">{{ resolved }}</span>
+        <span class="metric-label">Resolved</span>
     </div>
     <div class="metric-card metric-progress">
         <span class="metric-value">{{ in_progress }}</span>
@@ -89,8 +85,8 @@
                 </td>
                 <td style="display: flex; gap: 6px; align-items: center;">
                     {% if not task or task.status.value in ['failed', 'merged'] %}
-                    <form method="POST" action="/tasks/kickoff/{{ issue.number }}" style="margin: 0;">
-                        <button type="submit" class="btn btn-primary btn-sm">Kick Off</button>
+                    <form method="POST" action="/tasks/begin/{{ issue.number }}" style="margin: 0;">
+                        <button type="submit" class="btn btn-primary btn-sm">Begin</button>
                     </form>
                     {% endif %}
                     {% if task %}
@@ -136,13 +132,18 @@
             <tr>
                 <td><a href="/tasks/{{ task.id }}">#{{ task.issue_number }}</a></td>
                 <td><a href="/tasks/{{ task.id }}">{{ task.issue_title }}</a></td>
-                <td><span class="status-badge status-{{ task.status.value }}">{{ task.status.value | replace('_', ' ') }}</span></td>
+                <td>
+                    <span class="status-badge status-{{ task.status.value }}">{{ task.status.value | replace('_', ' ') }}</span>
+                    {% if task.confidence_label %}
+                    <br><span class="conf-badge conf-{{ task.confidence_class }}" title="Confidence: {{ task.plan.confidence }}/100">{{ task.confidence_label }}</span>
+                    {% endif %}
+                </td>
                 <td>
                     {% if task.test_result == 'passed' %}
                     <span class="test-badge test-passed" title="{{ task.test_summary or '' }}">Passed</span>
                     {% elif task.test_result == 'failed' %}
                     <span class="test-badge test-failed" title="{{ task.test_summary or '' }}">Failed</span>
-                    {% elif task.status.value in ['resolving', 'queued'] %}
+                    {% elif task.status.value in ['planning', 'implementing', 'resolving', 'queued'] %}
                     <span class="meta">Pending</span>
                     {% else %}
                     <span class="meta">&mdash;</span>
@@ -161,7 +162,7 @@
                     {% if task.pr_url %} | <a href="{{ task.pr_url }}" target="_blank">PR</a>{% endif %}
                 </td>
                 <td style="display: flex; gap: 6px; align-items: center;">
-                    {% if task.status.value == 'ready_to_merge' and task.pr_number %}
+                    {% if task.is_gate_two or (task.status.value == 'ready_to_merge' and task.pr_number) %}
                     <form method="POST" action="/tasks/{{ task.id }}/merge" style="margin: 0;">
                         <button type="submit" class="btn btn-primary btn-sm">Merge PR</button>
                     </form>
