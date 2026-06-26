@@ -164,7 +164,7 @@
                     {% if task.pr_url %} | <a href="{{ task.pr_url }}" target="_blank">PR</a>{% endif %}
                 </td>
                 <td style="display: flex; gap: 6px; align-items: center;">
-                    {% if task.is_gate_two or (task.status.value == 'ready_to_merge' and task.pr_number) %}
+                    {% if (task.is_gate_two or task.status.value == 'ready_to_merge') and task.pr_number %}
                     <form method="POST" action="/tasks/{{ task.id }}/merge" style="margin: 0;">
                         <button type="submit" class="btn btn-primary btn-sm">Merge PR</button>
                     </form>
@@ -217,6 +217,10 @@
         if (fresh) {
             document.getElementById("list-pane").innerHTML = fresh.innerHTML;
             if (panel.dataset.taskId) markActive(panel.dataset.taskId);
+        }
+        const freshMetrics = doc.querySelector(".metrics-row");
+        if (freshMetrics) {
+            document.querySelector(".metrics-row").innerHTML = freshMetrics.innerHTML;
         }
     }
 
