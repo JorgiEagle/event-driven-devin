@@ -286,6 +286,7 @@ def _build_planning_prompt(task: Task) -> str:
         "a pull request yet. Investigate the issue and produce a structured "
         "implementation plan covering:\n"
         "  - issue_summary: a concise summary of the issue\n"
+        "  - impact: the potential impact this issue\n"
         "  - root_causes: the underlying root cause(s)\n"
         "  - proposed_fix: the proposed implementation/fix\n"
         "  - reasoning: why this is the best solution and how it fixes the issue\n"
