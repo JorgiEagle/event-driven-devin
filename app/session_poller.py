@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import json
 import logging
 import re
 from typing import Any, Optional
@@ -133,9 +135,19 @@ async def _handle_planning_session(
     terminal state without producing a plan, flag it for attention.
     """
     if isinstance(structured_output, dict) and structured_output:
+        # Staleness guard: after a "request changes" loop the session still
+        # returns the PREVIOUS plan until Devin produces a revised one. Skip
+        # any structured_output we have already captured so we don't snap the
+        # task straight back to review with the stale plan.
+        output_hash = hashlib.sha256(
+            json.dumps(structured_output, sort_keys=True).encode("utf-8")
+        ).hexdigest()
+        if output_hash == task.last_plan_hash:
+            return
         plan = parse_plan(structured_output)
         task.plan = plan
         task.plan_markdown = plan.to_markdown()
+        task.last_plan_hash = output_hash
         task.transition_to(
             TaskStatus.AWAITING_REVIEW,
             reason="Plan ready for review",

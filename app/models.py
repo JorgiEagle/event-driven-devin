@@ -124,6 +124,7 @@ class Task(BaseModel):
     # 3-stage workflow fields
     plan: Optional[ImplementationPlan] = None  # structured plan from Devin
     plan_markdown: Optional[str] = None  # editable/exported Markdown of the plan
+    last_plan_hash: Optional[str] = None  # hash of last captured structured_output
     plan_approved: bool = False  # set when the Gate-1 plan is approved
     replan_count: int = 0  # number of "request changes" feedback loops
     review_summary: Optional[str] = None  # Gate-2: Devin Review comments + tests

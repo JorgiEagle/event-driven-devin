@@ -193,6 +193,9 @@ async def request_changes(
         )
     else:
         # Clear the stale plan so the poller captures the revised one.
+        # last_plan_hash is intentionally retained: the session keeps
+        # returning the OLD structured_output until Devin produces a revised
+        # plan, and the poller's staleness guard uses the hash to skip it.
         task.plan = None
         task.plan_markdown = None
         task.transition_to(
