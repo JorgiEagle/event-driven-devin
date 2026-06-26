@@ -68,7 +68,7 @@
             {% for entry in issues_with_status %}
             {% set issue = entry.issue %}
             {% set task = entry.task %}
-            <tr {% if task %}data-task-row="{{ task.id }}"{% endif %}>
+            <tr {% if task %}data-task-row="{{ task.id }}" data-task-id="{{ task.id }}" class="clickable-row"{% endif %}>
                 <td><a href="{{ issue.html_url }}" target="_blank">#{{ issue.number }}</a></td>
                 <td>{{ issue.title }}</td>
                 <td>
@@ -131,7 +131,7 @@
         </thead>
         <tbody>
             {% for task in tasks %}
-            <tr data-task-row="{{ task.id }}">
+            <tr data-task-row="{{ task.id }}" data-task-id="{{ task.id }}" class="clickable-row">
                 <td><a href="/tasks/{{ task.id }}" class="task-link" data-task-id="{{ task.id }}">#{{ task.issue_number }}</a></td>
                 <td><a href="/tasks/{{ task.id }}" class="task-link" data-task-id="{{ task.id }}">{{ task.issue_title }}</a></td>
                 <td>
@@ -229,6 +229,12 @@
         if (link) {
             e.preventDefault();
             loadPanel(link.dataset.taskId);
+            return;
+        }
+        if (e.target.closest("a, button, form")) return;
+        const row = e.target.closest(".clickable-row[data-task-id]");
+        if (row) {
+            loadPanel(row.dataset.taskId);
         }
     });
 
