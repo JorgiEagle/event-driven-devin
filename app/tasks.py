@@ -280,10 +280,13 @@ async def fail_task(task: Task, store: TaskStore, reason: str = "") -> Task:
 def _build_planning_prompt(task: Task) -> str:
     """Build the Stage-1 planning prompt (analyze only, no changes)."""
     return (
+        "You are a senior expert software engineer, tasked with addressing issues in a codebase\n"
+        "This is a PLANNING task. Do NOT make any code changes and do NOT open "
+        "a pull request yet. All plans produced should be clear, and consistent with the "
+        "exisiting codebase.\n"
         f"Analyze issue #{task.issue_number} in {task.repo}: {task.issue_title}\n\n"
         f"Issue URL: {task.issue_url}\n\n"
-        "This is a PLANNING task. Do NOT make any code changes and do NOT open "
-        "a pull request yet. Investigate the issue and produce a structured "
+        "Investigate the issue and produce a structured "
         "implementation plan covering:\n"
         "  - issue_summary: a concise summary of the issue\n"
         "  - impact: the potential impact this issue\n"
