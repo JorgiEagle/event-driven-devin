@@ -232,9 +232,8 @@
         const form = e.target;
         if (!form.matches("form[method='POST'], form[method='post']")) return;
         e.preventDefault();
-        await fetch(form.action, { method: "POST", body: new FormData(form) });
-        const inPanel = panel.contains(form);
-        if (inPanel && panel.dataset.taskId) {
+        await fetch(form.action, { method: "POST", body: new FormData(form), redirect: "manual" });
+        if (panel.dataset.taskId) {
             await loadPanel(panel.dataset.taskId);
         }
         await refreshList();
