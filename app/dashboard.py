@@ -1,18 +1,18 @@
-"""Dashboard routes: web UI for issue listing and manual task kickoff."""
+"""Dashboard routes: web UI for issue listing, plan review, and PR merge."""
 
 from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi import APIRouter, Form, Request
+from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
 from app.config import Settings
 from app.github_client import GitHubClient
-from app.models import Task, TaskStatus
+from app.models import TaskStatus
 from app.store import TaskStore
-from app.tasks import kickoff_task, merge_task
+from app.tasks import approve_task, merge_task, request_changes
 from app.tunnel import get_tunnel_url, get_webhook_url
 
 logger = logging.getLogger(__name__)
@@ -46,19 +46,16 @@ async def dashboard(request: Request) -> HTMLResponse:
     # Compute metric card counts
     in_progress_statuses = {
         TaskStatus.READY,
+        TaskStatus.PLANNING,
+        TaskStatus.AWAITING_REVIEW,
+        TaskStatus.IMPLEMENTING,
+        TaskStatus.ATTENTION_REQUIRED,
+        # Legacy active statuses
         TaskStatus.QUEUED,
         TaskStatus.RESOLVING,
         TaskStatus.READY_TO_MERGE,
-        TaskStatus.ATTENTION_REQUIRED,
     }
-    resolved_auto = sum(
-        1 for t in tasks
-        if t.status == TaskStatus.MERGED and t.trigger == "webhook"
-    )
-    resolved_manual = sum(
-        1 for t in tasks
-        if t.status == TaskStatus.MERGED and t.trigger == "manual"
-    )
+    resolved = sum(1 for t in tasks if t.status == TaskStatus.MERGED)
     in_progress = sum(1 for t in tasks if t.status in in_progress_statuses)
     in_progress_issue_numbers = {
         t.issue_number for t in tasks if t.status in in_progress_statuses
@@ -81,8 +78,7 @@ async def dashboard(request: Request) -> HTMLResponse:
             "tasks": tasks,
             "target_repo": settings.target_repo,
             "webhook_url": webhook_url,
-            "resolved_auto": resolved_auto,
-            "resolved_manual": resolved_manual,
+            "resolved": resolved,
             "in_progress": in_progress,
             "outstanding": outstanding,
         },
@@ -107,67 +103,89 @@ async def task_detail(request: Request, task_id: str) -> HTMLResponse:
     )
 
 
-@router.post("/tasks/kickoff/{issue_number}")
-async def manual_kickoff(
+@router.post("/tasks/begin/{issue_number}")
+async def begin_task(
     request: Request,
     issue_number: int,
 ) -> RedirectResponse:
-    """Kick off a Devin session for a specific GitHub issue.
+    """Begin work on an issue by adding the trigger label on GitHub.
 
-    The issue data is fetched from GitHub (authoritative source).
+    There is no manual task creation path: adding the ``assign-devin`` label
+    fires an ``issues.labeled`` webhook, which is the single entry point for
+    task creation. This keeps GitHub and the dashboard as one source of truth.
     """
     settings: Settings = request.app.state.settings
-    store: TaskStore = request.app.state.store
     github = GitHubClient(settings)
 
-    repo = settings.target_repo
-
-    # Check for existing active task
-    existing = store.get_by_issue(repo, issue_number)
-    if existing and existing.status not in (TaskStatus.FAILED, TaskStatus.MERGED):
+    added = await github.add_label(issue_number, settings.trigger_label)
+    if added:
         logger.info(
-            "Manual kickoff skipped - task already active",
+            "Trigger label added from dashboard",
             extra={
-                "task_id": existing.id,
                 "issue_number": issue_number,
-                "state": existing.status.value,
+                "repo": settings.target_repo,
+                "label": settings.trigger_label,
             },
         )
-        return RedirectResponse(url=f"/tasks/{existing.id}", status_code=303)
-
-    # Fetch issue details from GitHub
-    issue_data = await github.get_issue(issue_number)
-
-    if not issue_data:
+    else:
         logger.warning(
-            "Cannot kick off - issue not found on GitHub",
-            extra={"issue_number": issue_number, "repo": repo},
+            "Failed to add trigger label from dashboard",
+            extra={"issue_number": issue_number, "repo": settings.target_repo},
         )
+    return RedirectResponse(url="/", status_code=303)
+
+
+@router.post("/tasks/{task_id}/approve")
+async def approve_plan(
+    request: Request,
+    task_id: str,
+    plan_markdown: str = Form(default=""),
+) -> RedirectResponse:
+    """Gate-1 approval: send the (possibly edited) plan back to implement."""
+    settings: Settings = request.app.state.settings
+    store: TaskStore = request.app.state.store
+
+    task = store.get(task_id)
+    if not task:
         return RedirectResponse(url="/", status_code=303)
 
-    task = Task(
-        issue_number=issue_number,
-        issue_title=issue_data.get("title", f"Issue #{issue_number}"),
-        issue_url=issue_data.get("html_url", f"https://github.com/{repo}/issues/{issue_number}"),
-        repo=repo,
-        trigger="manual",
-    )
-    task.transition_to(TaskStatus.READY, reason="Manual kickoff from dashboard")
-    store.add(task)
-
-    logger.info(
-        "Task created via manual kickoff",
-        extra={
-            "task_id": task.id,
-            "issue_number": issue_number,
-            "repo": repo,
-            "event_type": "manual",
-            "state": task.status.value,
-        },
-    )
-
-    await kickoff_task(task, store, settings)
+    await approve_task(task, store, settings, plan_markdown or None)
     return RedirectResponse(url=f"/tasks/{task.id}", status_code=303)
+
+
+@router.post("/tasks/{task_id}/request-changes")
+async def request_task_changes(
+    request: Request,
+    task_id: str,
+    feedback: str = Form(default=""),
+) -> RedirectResponse:
+    """Send review feedback to the session and loop back (re-plan / re-implement)."""
+    settings: Settings = request.app.state.settings
+    store: TaskStore = request.app.state.store
+
+    task = store.get(task_id)
+    if not task:
+        return RedirectResponse(url="/", status_code=303)
+
+    await request_changes(task, store, settings, feedback)
+    return RedirectResponse(url=f"/tasks/{task.id}", status_code=303)
+
+
+@router.get("/tasks/{task_id}/plan.md", response_class=PlainTextResponse)
+async def export_plan(request: Request, task_id: str) -> PlainTextResponse:
+    """Download the implementation plan as a Markdown file."""
+    store: TaskStore = request.app.state.store
+    task = store.get(task_id)
+    if not task or not (task.plan_markdown or task.plan):
+        return PlainTextResponse("No plan available.", status_code=404)
+    content = task.plan_markdown or (task.plan.to_markdown() if task.plan else "")
+    return PlainTextResponse(
+        content,
+        headers={
+            "Content-Disposition": f'attachment; filename="plan-{task.issue_number}.md"'
+        },
+        media_type="text/markdown",
+    )
 
 
 @router.post("/tasks/{task_id}/merge")
